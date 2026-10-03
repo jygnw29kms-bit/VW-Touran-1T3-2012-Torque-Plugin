@@ -329,7 +329,7 @@ public class MainActivity extends Activity {
 
     private String csv(String s) {
         if(s==null) return "";
-        return """ + s.replace(""","""") + """;
+        return "\"" + s.replace("\"","\"\"") + "\"";
     }
 
     private String safe(String s) { return s==null?"":s; }
