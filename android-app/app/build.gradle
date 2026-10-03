@@ -1,0 +1,24 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'de.growcentral.touranlive'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "de.growcentral.touranlive"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0"
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += ['-Xlint:deprecation']
+}
+
+android.applicationVariants.all { variant ->
+    variant.outputs.all { output ->
+        outputFileName = "TouranLive-" + variant.versionName + "-" + variant.buildType.name + ".apk"
+    }
+}
