@@ -5,8 +5,10 @@ import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -17,11 +19,15 @@ import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -29,14 +35,23 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
+    private static final int REQ_BT = 10;
+    private static final int REQ_EXPORT_LOG = 20;
+
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
     private BluetoothSocket socket;
     private BufferedReader reader;
     private OutputStream writer;
     private TextView status;
+    private TextView logStatus;
     private GridLayout grid;
     private volatile boolean polling = false;
+
+    private final Object logLock = new Object();
+    private final StringBuilder csvLog = new StringBuilder();
+    private int logRows = 0;
+    private long logStartedAt = 0L;
 
     private static class Pid {
         final String cmd, label, unit;
@@ -69,6 +84,7 @@ public class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
+        resetLog();
         buildUi();
         requestBtPermission();
     }
@@ -81,6 +97,7 @@ public class MainActivity extends Activity {
 
         LinearLayout top=new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView title=new TextView(this);
         title.setText("TOURAN LIVE  •  1T3 2012  •  CAVC");
         title.setTextColor(Color.WHITE);
@@ -97,14 +114,32 @@ public class MainActivity extends Activity {
         disconnect.setText("Trennen");
         disconnect.setOnClickListener(v->disconnect());
         top.addView(disconnect);
+
+        Button export=new Button(this);
+        export.setText("Log auf USB speichern");
+        export.setOnClickListener(v->exportLog());
+        top.addView(export);
+
+        Button clear=new Button(this);
+        clear.setText("Log leeren");
+        clear.setOnClickListener(v->{ resetLog(); postStatus("Log geleert."); });
+        top.addView(clear);
+
         root.addView(top);
 
         status=new TextView(this);
         status.setText("Bereit – Zündung an, ES359 einstecken und Bluetooth koppeln.");
         status.setTextColor(Color.rgb(80,180,255));
         status.setTextSize(15);
-        status.setPadding(6,4,6,10);
+        status.setPadding(6,4,6,4);
         root.addView(status);
+
+        logStatus=new TextView(this);
+        logStatus.setText("Logger bereit");
+        logStatus.setTextColor(Color.LTGRAY);
+        logStatus.setTextSize(13);
+        logStatus.setPadding(6,0,6,10);
+        root.addView(logStatus);
 
         ScrollView scroll=new ScrollView(this);
         grid=new GridLayout(this);
@@ -116,7 +151,7 @@ public class MainActivity extends Activity {
 
     private void requestBtPermission() {
         if (Build.VERSION.SDK_INT>=31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN},10);
+            requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN},REQ_BT);
         }
     }
 
@@ -139,9 +174,11 @@ public class MainActivity extends Activity {
                 reader=new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
                 initElm();
                 polling=true;
-                postStatus("Verbunden • ELM327 initialisiert • Live-Daten laufen");
+                appendSystemLog("CONNECTED", target.getName());
+                postStatus("Verbunden • ELM327 initialisiert • Live-Daten laufen • Logger aktiv");
                 pollLoop();
             } catch(Exception e) {
+                appendSystemLog("CONNECT_ERROR", e.getMessage());
                 postStatus("Verbindung fehlgeschlagen: "+e.getMessage());
                 closeSocket();
             }
@@ -149,7 +186,12 @@ public class MainActivity extends Activity {
     }
 
     private void initElm() throws Exception {
-        send("ATZ"); send("ATE0"); send("ATL0"); send("ATS0"); send("ATH0"); send("ATSP0");
+        logCommand("ATZ", send("ATZ"));
+        logCommand("ATE0", send("ATE0"));
+        logCommand("ATL0", send("ATL0"));
+        logCommand("ATS0", send("ATS0"));
+        logCommand("ATH0", send("ATH0"));
+        logCommand("ATSP0", send("ATSP0"));
     }
 
     private String send(String cmd) throws Exception {
@@ -176,10 +218,27 @@ public class MainActivity extends Activity {
                 try {
                     String raw=send(p.cmd);
                     Double value=decode(p.cmd, raw);
+                    String statusCode=classify(raw,value);
+                    appendPidLog(p,raw,value,statusCode);
                     if(value!=null) updateTile(p.label, fmt(value), p.unit);
-                } catch(Exception ignored) {}
+                } catch(Exception e) {
+                    appendPidLog(p,"",null,"ERROR:"+safe(e.getMessage()));
+                }
             }
         }
+    }
+
+    private String classify(String raw, Double value) {
+        String u=raw==null?"":raw.toUpperCase(Locale.ROOT);
+        if(value!=null) return "OK";
+        if(u.contains("NO DATA")) return "NO_DATA";
+        if(u.contains("CAN ERROR")) return "CAN_ERROR";
+        if(u.contains("BUS ERROR")) return "BUS_ERROR";
+        if(u.contains("STOPPED")) return "STOPPED";
+        if(u.contains("UNABLE TO CONNECT")) return "UNABLE_TO_CONNECT";
+        if(u.matches(".*7F[0-9A-F]{2}[0-9A-F]{2}.*")) return "NEGATIVE_RESPONSE";
+        if(u.trim().isEmpty()) return "EMPTY";
+        return "UNPARSED";
     }
 
     private Double decode(String cmd,String raw) {
@@ -210,8 +269,103 @@ public class MainActivity extends Activity {
     }
 
     private String fmt(double v) {
-        if(Math.abs(v)>=100 || Math.rint(v)==v) return String.format(java.util.Locale.GERMANY,"%.0f",v);
-        return String.format(java.util.Locale.GERMANY,"%.1f",v);
+        if(Math.abs(v)>=100 || Math.rint(v)==v) return String.format(Locale.GERMANY,"%.0f",v);
+        return String.format(Locale.GERMANY,"%.1f",v);
+    }
+
+    private void resetLog() {
+        synchronized(logLock) {
+            csvLog.setLength(0);
+            csvLog.append("timestamp;elapsed_ms;pid;label;raw_response;decoded_value;unit;status\n");
+            logRows=0;
+            logStartedAt=System.currentTimeMillis();
+        }
+        updateLogStatus();
+    }
+
+    private void appendPidLog(Pid p,String raw,Double value,String state) {
+        synchronized(logLock) {
+            csvLog.append(now()).append(';')
+                  .append(System.currentTimeMillis()-logStartedAt).append(';')
+                  .append(csv(p.cmd)).append(';')
+                  .append(csv(p.label)).append(';')
+                  .append(csv(raw)).append(';')
+                  .append(value==null?"":csv(fmt(value))).append(';')
+                  .append(csv(p.unit)).append(';')
+                  .append(csv(state)).append('\n');
+            logRows++;
+        }
+        updateLogStatus();
+    }
+
+    private void appendSystemLog(String state,String detail) {
+        synchronized(logLock) {
+            csvLog.append(now()).append(';')
+                  .append(System.currentTimeMillis()-logStartedAt).append(';')
+                  .append("SYSTEM;;;")
+                  .append(csv(detail)).append(";;;")
+                  .append(csv(state)).append('\n');
+            logRows++;
+        }
+        updateLogStatus();
+    }
+
+    private void logCommand(String cmd,String raw) {
+        synchronized(logLock) {
+            csvLog.append(now()).append(';')
+                  .append(System.currentTimeMillis()-logStartedAt).append(';')
+                  .append(csv(cmd)).append(';')
+                  .append("ELM_INIT;")
+                  .append(csv(raw)).append(";;;")
+                  .append("INIT").append('\n');
+            logRows++;
+        }
+        updateLogStatus();
+    }
+
+    private String now() {
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.GERMANY).format(new Date());
+    }
+
+    private String csv(String s) {
+        if(s==null) return "";
+        return """ + s.replace(""","""") + """;
+    }
+
+    private String safe(String s) { return s==null?"":s; }
+
+    private void updateLogStatus() {
+        ui.post(() -> {
+            if(logStatus!=null) logStatus.setText("Logger: "+logRows+" Zeilen • Rohantworten + Fehler werden mitgespeichert");
+        });
+    }
+
+    private void exportLog() {
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("text/csv");
+        i.putExtra(Intent.EXTRA_TITLE,"TouranLive_"+new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.GERMANY).format(new Date())+".csv");
+        startActivityForResult(i,REQ_EXPORT_LOG);
+    }
+
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQ_EXPORT_LOG && resultCode==RESULT_OK && data!=null) {
+            Uri uri=data.getData();
+            if(uri!=null) {
+                io.execute(() -> {
+                    try(OutputStream out=getContentResolver().openOutputStream(uri,"w")) {
+                        String snapshot;
+                        synchronized(logLock) { snapshot=csvLog.toString(); }
+                        out.write(snapshot.getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        ui.post(() -> Toast.makeText(this,"Log gespeichert.",Toast.LENGTH_LONG).show());
+                    } catch(Exception e) {
+                        ui.post(() -> Toast.makeText(this,"Speichern fehlgeschlagen: "+e.getMessage(),Toast.LENGTH_LONG).show());
+                    }
+                });
+            }
+        }
     }
 
     private void updateTile(String label,String value,String unit) {
@@ -244,7 +398,11 @@ public class MainActivity extends Activity {
 
     private void disconnect() {
         polling=false;
-        io.execute(() -> { closeSocket(); postStatus("Getrennt."); });
+        io.execute(() -> {
+            appendSystemLog("DISCONNECTED","manual");
+            closeSocket();
+            postStatus("Getrennt. Log kann jetzt auf USB gespeichert werden.");
+        });
     }
 
     private void closeSocket() {
