@@ -5,8 +5,28 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-    <application android:theme="@style/AppTheme" android:label="Touran Live" android:icon="@drawable/touran_live_icon" android:roundIcon="@drawable/touran_live_icon" android:allowBackup="false">
-        <activity android:name=".MainActivity" android:screenOrientation="landscape" android:exported="true">
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="geo"/>
+        </intent>
+    </queries>
+
+    <application
+        android:theme="@style/AppTheme"
+        android:label="135er Touran"
+        android:icon="@drawable/touran_live_icon"
+        android:roundIcon="@drawable/touran_live_icon"
+        android:allowBackup="false">
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="landscape"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
