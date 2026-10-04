@@ -9,7 +9,11 @@ import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -74,6 +78,8 @@ public class MainActivity extends Activity {
     private TextView loggerBadge;
     private TextView statusLine;
     private GridLayout liveGrid;
+    private DashboardView dashboardView;
+    private final Map<String, Double> liveValues = new LinkedHashMap<>();
 
     private final Object logLock = new Object();
     private final StringBuilder csvLog = new StringBuilder();
@@ -126,7 +132,7 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         resetLog();
         buildShell();
-        showHome();
+        showVehicle();
         requestBtPermission();
     }
 
@@ -162,8 +168,8 @@ public class MainActivity extends Activity {
         nav.setGravity(Gravity.CENTER);
         nav.setPadding(dp(10), dp(7), dp(10), dp(9));
         nav.setBackgroundColor(Color.rgb(10, 12, 15));
-        nav.addView(navButton("HOME", v -> showHome()), weight());
-        nav.addView(navButton("FAHRZEUG", v -> showVehicle()), weight());
+        nav.addView(navButton("TACHO", v -> showVehicle()), weight());
+        nav.addView(navButton("LIVE", v -> showHome()), weight());
         nav.addView(navButton("LOGGER", v -> showLogger()), weight());
         nav.addView(navButton("VCDS", v -> showVcds()), weight());
         nav.addView(navButton("APPS", v -> showApps()), weight());
@@ -220,31 +226,18 @@ public class MainActivity extends Activity {
 
     private void showVehicle() {
         content.removeAllViews();
+        liveGrid = null;
 
         LinearLayout head = new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView t = title("FAHRZEUG • LIVE");
+        TextView t = title("FAHRZEUGANSICHT (MFA) • SEITE 1/4");
         head.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
         head.addView(actionButton("VERBINDEN", v -> connect()));
         head.addView(actionButton("TRENNEN", v -> disconnect()));
         content.addView(head);
 
-        TextView note = body("Es werden ausschließlich PIDs angezeigt, die das Motorsteuergerät über den OBD-II-Support-Bitmap bestätigt und anschließend mit gültigen Daten beantwortet.");
-        note.setPadding(0, dp(6), 0, dp(8));
-        content.addView(note);
-
-        ScrollView scroll = new ScrollView(this);
-        liveGrid = new GridLayout(this);
-        liveGrid.setColumnCount(4);
-        scroll.addView(liveGrid);
-        content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        if (!polling) {
-            TextView empty = body("Noch keine bestätigten Live-Werte.");
-            empty.setTextSize(20);
-            empty.setGravity(Gravity.CENTER);
-            liveGrid.addView(empty, tileParams());
-        }
+        dashboardView = new DashboardView();
+        content.addView(dashboardView, new LinearLayout.LayoutParams(-1, 0, 1));
     }
 
     private void showLogger() {
@@ -604,6 +597,17 @@ public class MainActivity extends Activity {
 
     private void updateTile(String label, String value, String unit) {
         ui.post(() -> {
+            double numeric;
+            try { numeric = Double.parseDouble(value.replace(',', '.')); } catch (Exception ex) { numeric = Double.NaN; }
+            if (!Double.isNaN(numeric)) {
+                liveValues.put(label, numeric);
+                Double map = liveValues.get("Saugrohrdruck");
+                Double baro = liveValues.get("Umgebungsdruck");
+                if (map != null && baro != null) {
+                    liveValues.put("Ladedruck", (map - baro) / 100.0);
+                }
+                if (dashboardView != null) dashboardView.invalidate();
+            }
             if (liveGrid == null) return;
             TextView found = null;
             for (int i=0;i<liveGrid.getChildCount();i++) {
@@ -613,8 +617,6 @@ public class MainActivity extends Activity {
                     break;
                 }
             }
-            double numeric;
-            try { numeric = Double.parseDouble(value.replace(',', '.')); } catch (Exception ex) { numeric = Double.NaN; }
             if (!Double.isNaN(numeric)) {
                 Double min = minSeen.get(label);
                 Double max = maxSeen.get(label);
@@ -644,6 +646,158 @@ public class MainActivity extends Activity {
                 liveGrid.addView(tile, tileParams());
             }
         });
+    }
+
+
+    private class DashboardView extends View {
+        private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        DashboardView() {
+            super(MainActivity.this);
+            setBackgroundColor(BG);
+        }
+
+        private Double v(String key) { return liveValues.get(key); }
+
+        private String value(String key, String unit) {
+            Double d = v(key);
+            return d == null ? "—" : fmt(d) + (unit.isEmpty() ? "" : " " + unit);
+        }
+
+        private void txt(Canvas c, String s, float x, float y, float size, int color, Paint.Align align, boolean bold) {
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(color);
+            p.setTextSize(size);
+            p.setTextAlign(align);
+            p.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            c.drawText(s, x, y, p);
+        }
+
+        private void line(Canvas c, float x1, float y1, float x2, float y2, int color, float stroke) {
+            p.setColor(color); p.setStrokeWidth(stroke); p.setStyle(Paint.Style.STROKE);
+            c.drawLine(x1,y1,x2,y2,p);
+        }
+
+        private void dial(Canvas c, float cx, float cy, float r, double max, String label,
+                          String unit, String key, int major) {
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(Math.max(2f, r * .012f));
+            p.setColor(Color.rgb(100,105,112));
+            c.drawCircle(cx,cy,r,p);
+            p.setStrokeWidth(Math.max(1f, r * .006f));
+            p.setColor(Color.rgb(205,210,216));
+            c.drawCircle(cx,cy,r*.965f,p);
+
+            float start = 135f, sweep = 270f;
+            for (int i=0;i<=major*5;i++) {
+                float f = i/(float)(major*5);
+                float a = (float)Math.toRadians(start + sweep*f);
+                float len = (i%5==0) ? r*.10f : r*.055f;
+                float ox = cx + (float)Math.cos(a)*r*.92f;
+                float oy = cy + (float)Math.sin(a)*r*.92f;
+                float ix = cx + (float)Math.cos(a)*(r*.92f-len);
+                float iy = cy + (float)Math.sin(a)*(r*.92f-len);
+                line(c,ix,iy,ox,oy,(i > major*4 ? RED : TEXT),(i%5==0)?3f:1.5f);
+                if (i%5==0) {
+                    int n=i/5;
+                    int shown=key.equals("Drehzahl") ? n : (int)Math.round(max*n/major);
+                    txt(c,String.valueOf(shown),
+                            cx+(float)Math.cos(a)*r*.70f,
+                            cy+(float)Math.sin(a)*r*.70f+8,
+                            r*.12f,TEXT,Paint.Align.CENTER,true);
+                }
+            }
+
+            txt(c,label,cx,cy-r*.32f,r*.085f,MUTED,Paint.Align.CENTER,false);
+            Double d=v(key);
+            double val=d==null?0:Math.max(0,Math.min(max,d));
+            float a=(float)Math.toRadians(start+sweep*(val/max));
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(r*.035f); p.setColor(RED);
+            c.drawLine(cx,cy,
+                    cx+(float)Math.cos(a)*r*.62f,
+                    cy+(float)Math.sin(a)*r*.62f,p);
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.rgb(25,27,31));
+            c.drawCircle(cx,cy,r*.08f,p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(3); p.setColor(Color.LTGRAY);
+            c.drawCircle(cx,cy,r*.08f,p);
+
+            String main=d==null?"—":fmt(d);
+            txt(c,main,cx,cy+r*.37f,r*.16f,TEXT,Paint.Align.CENTER,true);
+            txt(c,unit,cx,cy+r*.47f,r*.075f,MUTED,Paint.Align.CENTER,false);
+        }
+
+        private void mini(Canvas c, float cx, float cy, float w, String title, String key, String unit) {
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.rgb(13,16,20));
+            c.drawRoundRect(new RectF(cx-w/2,cy-w*.30f,cx+w/2,cy+w*.30f),10,10,p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); p.setColor(Color.rgb(55,60,66));
+            c.drawRoundRect(new RectF(cx-w/2,cy-w*.30f,cx+w/2,cy+w*.30f),10,10,p);
+            txt(c,title,cx,cy-w*.06f,w*.11f,MUTED,Paint.Align.CENTER,false);
+            txt(c,value(key,unit),cx,cy+w*.15f,w*.16f,TEXT,Paint.Align.CENTER,true);
+        }
+
+        private void mfaRow(Canvas c, float x1, float x2, float y, String label, String key, String unit) {
+            line(c,x1,y+10,x2,y+10,Color.rgb(45,50,56),1.5f);
+            txt(c,label,x1+12,y,18,MUTED,Paint.Align.LEFT,false);
+            txt(c,value(key,unit),x2-12,y,21,TEXT,Paint.Align.RIGHT,true);
+        }
+
+        @Override protected void onDraw(Canvas c) {
+            super.onDraw(c);
+            float w=getWidth(), h=getHeight();
+            if (w<=0 || h<=0) return;
+
+            float r=Math.min(h*.33f,w*.17f);
+            float cy=h*.39f;
+            float lx=w*.19f, rx=w*.81f;
+
+            dial(c,lx,cy,r,8000,"1/min x 1000","rpm","Drehzahl",8);
+            dial(c,rx,cy,r,240,"km/h","km/h","Geschwindigkeit",12);
+
+            mini(c,lx-r*.48f,cy+r*.83f,r*.80f,"Kühlmittel","Kühlmittel","°C");
+            mini(c,lx+r*.48f,cy+r*.83f,r*.80f,"Öltemperatur","Öltemperatur","°C");
+            mini(c,rx-r*.48f,cy+r*.83f,r*.80f,"Bordspannung","ECU-Spannung","V");
+            mini(c,rx+r*.48f,cy+r*.83f,r*.80f,"Außentemperatur","Außentemperatur","°C");
+
+            float x1=w*.365f, x2=w*.635f, top=h*.06f, bottom=h*.78f;
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.rgb(11,14,18));
+            c.drawRoundRect(new RectF(x1,top,x2,bottom),14,14,p);
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2); p.setColor(Color.rgb(45,50,56));
+            c.drawRoundRect(new RectF(x1,top,x2,bottom),14,14,p);
+
+            txt(c,"‹",x1+24,top+38,34,TEXT,Paint.Align.CENTER,true);
+            txt(c,"1/4   FAHRT",w*.5f,top+38,23,TEXT,Paint.Align.CENTER,true);
+            txt(c,"›",x2-24,top+38,34,TEXT,Paint.Align.CENTER,true);
+            line(c,x1+8,top+52,x2-8,top+52,RED,3);
+
+            float boxTop=top+70, boxH=h*.23f;
+            p.setStyle(Paint.Style.FILL); p.setColor(Color.rgb(14,17,21));
+            c.drawRoundRect(new RectF(x1+10,boxTop,w*.495f-4,boxTop+boxH),10,10,p);
+            c.drawRoundRect(new RectF(w*.505f+4,boxTop,x2-10,boxTop+boxH),10,10,p);
+
+            txt(c,"Ladedruck (Ist)",x1+22,boxTop+27,17,MUTED,Paint.Align.LEFT,false);
+            txt(c,value("Ladedruck","bar"),(x1+w*.495f)/2,boxTop+73,31,TEXT,Paint.Align.CENTER,true);
+            txt(c,"Soll   —",(x1+w*.495f)/2,boxTop+boxH-16,17,MUTED,Paint.Align.CENTER,false);
+
+            txt(c,"Motorlast",w*.505f+18,boxTop+27,17,MUTED,Paint.Align.LEFT,false);
+            txt(c,value("Motorlast","%"),(w*.505f+x2)/2,boxTop+73,31,TEXT,Paint.Align.CENTER,true);
+
+            float y=boxTop+boxH+37;
+            mfaRow(c,x1+10,x2-10,y,"Luftmasse (MAF)","Luftmasse","g/s"); y+=48;
+            mfaRow(c,x1+10,x2-10,y,"Drosselklappe","Drosselklappe","%"); y+=48;
+            mfaRow(c,x1+10,x2-10,y,"Gaspedalstellung","Pedalstellung","%"); y+=48;
+            mfaRow(c,x1+10,x2-10,y,"Zündwinkel","Zündwinkel","°KW");
+
+            float sy=h*.87f;
+            line(c,0,sy-22,w,sy-22,Color.rgb(55,60,66),2);
+            txt(c,polling?"OBD verbunden":"OBD getrennt",w*.03f,sy,18,polling?OK:RED,Paint.Align.LEFT,true);
+            txt(c,polling?protocolName:"—",w*.03f,sy+23,14,MUTED,Paint.Align.LEFT,false);
+            txt(c,"Logger "+(polling?"aktiv":"bereit")+" • "+logRows+" Zeilen",w*.34f,sy,18,TEXT,Paint.Align.LEFT,true);
+            txt(c,"DTC-Status: nicht geprüft",w*.67f,sy,18,MUTED,Paint.Align.LEFT,true);
+
+            String tm=new SimpleDateFormat("HH:mm",Locale.GERMANY).format(new Date());
+            String dt=new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date());
+            txt(c,tm,w*.97f,sy,18,TEXT,Paint.Align.RIGHT,true);
+            txt(c,dt,w*.97f,sy+23,14,MUTED,Paint.Align.RIGHT,false);
+        }
     }
 
     private void resetLog() {
@@ -783,6 +937,10 @@ public class MainActivity extends Activity {
 
     private void disconnect() {
         polling = false;
+        ui.post(() -> {
+            liveValues.clear();
+            if (dashboardView != null) dashboardView.invalidate();
+        });
         io.execute(() -> {
             appendSystemLog("DISCONNECTED", "manual");
             closeSocket();
@@ -804,12 +962,14 @@ public class MainActivity extends Activity {
                 connectionBadge.setText(text);
                 connectionBadge.setBackgroundColor(color);
             }
+            if (dashboardView != null) dashboardView.invalidate();
         });
     }
 
     private void updateLogBadge() {
         ui.post(() -> {
             if (loggerBadge != null) loggerBadge.setText("LOG: " + logRows);
+            if (dashboardView != null) dashboardView.invalidate();
         });
     }
 
