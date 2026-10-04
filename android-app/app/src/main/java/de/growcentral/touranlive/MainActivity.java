@@ -80,6 +80,10 @@ public class MainActivity extends Activity {
     private GridLayout liveGrid;
     private DashboardView dashboardView;
     private final Map<String, Double> liveValues = new LinkedHashMap<>();
+    private final List<String> storedDtcs = new ArrayList<>();
+    private final List<String> pendingDtcs = new ArrayList<>();
+    private final List<String> permanentDtcs = new ArrayList<>();
+    private String dtcStatus = "nicht geprüft";
 
     private final Object logLock = new Object();
     private final StringBuilder csvLog = new StringBuilder();
@@ -171,6 +175,7 @@ public class MainActivity extends Activity {
         nav.addView(navButton("TACHO", v -> showVehicle()), weight());
         nav.addView(navButton("LIVE", v -> showHome()), weight());
         nav.addView(navButton("LOGGER", v -> showLogger()), weight());
+        nav.addView(navButton("DIAGNOSE", v -> showDiagnostics()), weight());
         nav.addView(navButton("VCDS", v -> showVcds()), weight());
         nav.addView(navButton("APPS", v -> showApps()), weight());
         nav.addView(navButton("EINSTELLUNGEN", v -> openSettings()), weight());
@@ -263,6 +268,191 @@ public class MainActivity extends Activity {
             toast("Logger geleert.");
         }), weight());
         content.addView(row);
+    }
+
+    private void showDiagnostics() {
+        content.removeAllViews();
+        dashboardView = null;
+
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView t = title("MOTOR-DIAGNOSE • CAVC");
+        head.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        head.addView(actionButton("FEHLER LESEN", v -> readDiagnostics()), weight());
+        content.addView(head);
+
+        TextView info = body("Liest gespeicherte, schwebende und permanente OBD-Fehler aus dem Motorsteuergerät. Es werden keine Fehler gelöscht und keine Steuergerätewerte verändert.");
+        info.setPadding(0, dp(6), 0, dp(12));
+        content.addView(info);
+
+        TextView state = body("Status: " + dtcStatus);
+        state.setTextColor(storedDtcs.isEmpty() && pendingDtcs.isEmpty() && permanentDtcs.isEmpty() && !"nicht geprüft".equals(dtcStatus) ? OK : TEXT);
+        state.setTextSize(20);
+        state.setPadding(0, 0, 0, dp(10));
+        content.addView(state);
+
+        ScrollView sv = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+
+        addDtcSection(list, "GESPEICHERT • Mode 03", storedDtcs);
+        addDtcSection(list, "SCHWEBEND • Mode 07", pendingDtcs);
+        addDtcSection(list, "PERMANENT • Mode 0A", permanentDtcs);
+
+        sv.addView(list);
+        content.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
+    }
+
+    private void addDtcSection(LinearLayout list, String title, List<String> items) {
+        TextView h = body(title);
+        h.setTextColor(RED);
+        h.setTextSize(17);
+        h.setTypeface(Typeface.DEFAULT_BOLD);
+        h.setPadding(0, dp(8), 0, dp(5));
+        list.addView(h);
+
+        if (items.isEmpty()) {
+            TextView none = body("Keine gemeldeten Fehler.");
+            none.setTextColor(MUTED);
+            none.setPadding(dp(12), dp(8), dp(12), dp(12));
+            list.addView(none);
+            return;
+        }
+
+        for (String item : items) {
+            TextView row = body(item);
+            row.setTextColor(TEXT);
+            row.setTextSize(17);
+            row.setBackgroundColor(PANEL);
+            row.setPadding(dp(14), dp(12), dp(14), dp(12));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.setMargins(0, dp(3), 0, dp(3));
+            list.addView(row, lp);
+        }
+    }
+
+    private void readDiagnostics() {
+        if (socket == null || !socket.isConnected()) {
+            toast("Zuerst OBD verbinden.");
+            return;
+        }
+
+        dtcStatus = "wird gelesen …";
+        showDiagnostics();
+
+        polling = false;
+        io.execute(() -> {
+            try {
+                Thread.sleep(120);
+                String rawStored = send("03");
+                String rawPending = send("07");
+                String rawPermanent = send("0A");
+
+                List<String> a = parseDtcResponse(rawStored, "43");
+                List<String> b = parseDtcResponse(rawPending, "47");
+                List<String> c = parseDtcResponse(rawPermanent, "4A");
+
+                synchronized (storedDtcs) {
+                    storedDtcs.clear();
+                    storedDtcs.addAll(a);
+                    pendingDtcs.clear();
+                    pendingDtcs.addAll(b);
+                    permanentDtcs.clear();
+                    permanentDtcs.addAll(c);
+                }
+
+                appendDiagnosticLog("03", rawStored, a);
+                appendDiagnosticLog("07", rawPending, b);
+                appendDiagnosticLog("0A", rawPermanent, c);
+
+                int total = a.size() + b.size() + c.size();
+                dtcStatus = total == 0 ? "Keine Fehler gemeldet" : total + " Fehler/Statusmeldungen gefunden";
+            } catch (Exception e) {
+                dtcStatus = "Fehler beim Auslesen: " + safe(e.getMessage());
+                appendSystemLog("DTC_READ_ERROR", safe(e.getMessage()));
+            }
+
+            ui.post(() -> {
+                showDiagnostics();
+                if (dashboardView != null) dashboardView.invalidate();
+            });
+
+            if (socket != null && socket.isConnected()) {
+                polling = true;
+                pollLoop();
+            }
+        });
+    }
+
+    private void appendDiagnosticLog(String mode, String raw, List<String> dtcs) {
+        synchronized (logLock) {
+            csvLog.append(now()).append(';')
+                    .append(System.currentTimeMillis() - logStartedAt).append(';')
+                    .append(csv(mode)).append(';')
+                    .append("DTC_READ;")
+                    .append(csv(raw)).append(';')
+                    .append(csv(String.join(" | ", dtcs))).append(";;DIAGNOSIS\n");
+            logRows++;
+        }
+        updateLogBadge();
+    }
+
+    private List<String> parseDtcResponse(String raw, String serviceResponse) {
+        List<String> out = new ArrayList<>();
+        if (raw == null) return out;
+        String upper = raw.toUpperCase(Locale.ROOT);
+        if (upper.contains("NO DATA") || upper.contains("UNABLE TO CONNECT")) return out;
+
+        String hex = raw.replaceAll("[^0-9A-Fa-f]", "").toUpperCase(Locale.ROOT);
+        int pos = hex.indexOf(serviceResponse);
+        if (pos < 0) return out;
+        String payload = hex.substring(pos + 2);
+
+        for (int i = 0; i + 4 <= payload.length(); i += 4) {
+            String word = payload.substring(i, i + 4);
+            if ("0000".equals(word)) continue;
+            try {
+                int b1 = Integer.parseInt(word.substring(0, 2), 16);
+                int b2 = Integer.parseInt(word.substring(2, 4), 16);
+                String code = dtcCode(b1, b2);
+                if (!code.matches("[PCBU][0-3][0-9A-F]{3}")) continue;
+                String desc = dtcDescription(code);
+                String text = code + (desc.isEmpty() ? "" : " • " + desc);
+                if (!out.contains(text)) out.add(text);
+            } catch (Exception ignored) {}
+        }
+        return out;
+    }
+
+    private String dtcCode(int a, int b) {
+        char family = "PCBU".charAt((a >> 6) & 0x03);
+        int d1 = (a >> 4) & 0x03;
+        int d2 = a & 0x0F;
+        int d3 = (b >> 4) & 0x0F;
+        int d4 = b & 0x0F;
+        return String.format(Locale.ROOT, "%c%d%X%X%X", family, d1, d2, d3, d4);
+    }
+
+    private String dtcDescription(String code) {
+        switch (code) {
+            case "P0016": return "Kurbelwelle/Nockenwelle Bank 1 – Zuordnung unplausibel";
+            case "P0230": return "Kraftstoffpumpe – Primärkreis Fehlfunktion";
+            case "P0234": return "Ladedruckregelung – Grenzwert überschritten";
+            case "P0299": return "Ladedruckregelung – Regelgrenze unterschritten";
+            case "P0300": return "Zufällige/mehrfache Verbrennungsaussetzer";
+            case "P0301": return "Verbrennungsaussetzer Zylinder 1";
+            case "P0302": return "Verbrennungsaussetzer Zylinder 2";
+            case "P0303": return "Verbrennungsaussetzer Zylinder 3";
+            case "P0304": return "Verbrennungsaussetzer Zylinder 4";
+            case "P0363": return "Fehlzündung erkannt – Kraftstoffzufuhr abgeschaltet";
+            case "P1550": return "Ladedruckregelung / N75 – Regelabweichung";
+            case "P1555": return "Ladedruckregelung – obere Regelgrenze überschritten";
+            case "P2181": return "Kühlsystem – Funktion außerhalb Sollbereich";
+            case "P2187": return "Gemisch im Leerlauf zu mager";
+            case "P2279": return "Leck im Ansaugsystem";
+            case "P2293": return "Kraftstoffdruckregelung / N276 – mechanische Fehlfunktion";
+            default: return "";
+        }
     }
 
     private void showVcds() {
@@ -791,7 +981,8 @@ public class MainActivity extends Activity {
             txt(c,polling?"OBD verbunden":"OBD getrennt",w*.03f,sy,18,polling?OK:RED,Paint.Align.LEFT,true);
             txt(c,polling?protocolName:"—",w*.03f,sy+23,14,MUTED,Paint.Align.LEFT,false);
             txt(c,"Logger "+(polling?"aktiv":"bereit")+" • "+logRows+" Zeilen",w*.34f,sy,18,TEXT,Paint.Align.LEFT,true);
-            txt(c,"DTC-Status: nicht geprüft",w*.67f,sy,18,MUTED,Paint.Align.LEFT,true);
+            int dtcColor = "Keine Fehler gemeldet".equals(dtcStatus) ? OK : ("nicht geprüft".equals(dtcStatus) ? MUTED : RED);
+            txt(c,"DTC: " + dtcStatus,w*.67f,sy,18,dtcColor,Paint.Align.LEFT,true);
 
             String tm=new SimpleDateFormat("HH:mm",Locale.GERMANY).format(new Date());
             String dt=new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date());
