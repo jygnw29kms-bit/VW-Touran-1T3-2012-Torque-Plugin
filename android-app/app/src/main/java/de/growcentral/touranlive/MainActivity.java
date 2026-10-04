@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -28,6 +29,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -260,7 +263,7 @@ public class MainActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setPadding(0, dp(18), 0, 0);
-        row.addView(actionButton("LOG SPEICHERN", v -> exportLog()), weight());
+        row.addView(actionButton("LOG AUF USB", v -> exportLog()), weight());
         row.addView(actionButton("LOG LEEREN", v -> {
             resetLog();
             showLogger();
@@ -706,13 +709,58 @@ public class MainActivity extends Activity {
         updateLogBadge();
     }
 
+    private String newLogFileName() {
+        return "135er_Touran_" +
+                new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.GERMANY).format(new Date()) + ".csv";
+    }
+
     private void exportLog() {
-        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("text/csv");
-        i.putExtra(Intent.EXTRA_TITLE, "135er_Touran_" +
-                new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.GERMANY).format(new Date()) + ".csv");
-        startActivityForResult(i, REQ_EXPORT_LOG);
+        io.execute(() -> {
+            if (tryExportToUsb()) return;
+            ui.post(() -> {
+                toast("Kein direkt beschreibbarer USB-Speicher erkannt. Öffne Dateiauswahl …");
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("text/csv");
+                i.putExtra(Intent.EXTRA_TITLE, newLogFileName());
+                startActivityForResult(i, REQ_EXPORT_LOG);
+            });
+        });
+    }
+
+    private boolean tryExportToUsb() {
+        File[] dirs = getExternalFilesDirs(null);
+        if (dirs == null) return false;
+
+        String snapshot;
+        synchronized (logLock) { snapshot = csvLog.toString(); }
+
+        for (File dir : dirs) {
+            if (dir == null) continue;
+            boolean removable;
+            try {
+                removable = Environment.isExternalStorageRemovable(dir);
+            } catch (Exception e) {
+                removable = false;
+            }
+            if (!removable) continue;
+
+            try {
+                File folder = new File(dir, "135erTouranLogs");
+                if (!folder.exists() && !folder.mkdirs()) continue;
+                File outFile = new File(folder, newLogFileName());
+                try (FileOutputStream out = new FileOutputStream(outFile, false)) {
+                    out.write(snapshot.getBytes(StandardCharsets.UTF_8));
+                    out.flush();
+                }
+                appendSystemLog("USB_EXPORT", outFile.getAbsolutePath());
+                toast("Log auf USB gespeichert:\n" + outFile.getAbsolutePath());
+                return true;
+            } catch (Exception e) {
+                appendSystemLog("USB_EXPORT_ERROR", safe(e.getMessage()));
+            }
+        }
+        return false;
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
