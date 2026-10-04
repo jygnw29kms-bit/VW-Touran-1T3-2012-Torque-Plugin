@@ -78,6 +78,9 @@ public class MainActivity extends Activity {
     private long logStartedAt = 0L;
 
     private final Map<String, Boolean> support = new LinkedHashMap<>();
+    private final Map<String, Double> minSeen = new LinkedHashMap<>();
+    private final Map<String, Double> maxSeen = new LinkedHashMap<>();
+    private String protocolName = "unbekannt";
 
     private static class Pid {
         final String cmd, label, unit;
@@ -159,6 +162,7 @@ public class MainActivity extends Activity {
         nav.addView(navButton("HOME", v -> showHome()), weight());
         nav.addView(navButton("FAHRZEUG", v -> showVehicle()), weight());
         nav.addView(navButton("LOGGER", v -> showLogger()), weight());
+        nav.addView(navButton("VCDS", v -> showVcds()), weight());
         nav.addView(navButton("APPS", v -> showApps()), weight());
         nav.addView(navButton("EINSTELLUNGEN", v -> openSettings()), weight());
         root.addView(nav);
@@ -263,6 +267,49 @@ public class MainActivity extends Activity {
             toast("Logger geleert.");
         }), weight());
         content.addView(row);
+    }
+
+    private void showVcds() {
+        content.removeAllViews();
+        content.addView(title("VCDS • ABGLEICH"));
+
+        TextView intro = body("Arbeite die Punkte in dieser Reihenfolge ab. Nichts codieren, keine Anpassungen schreiben und keine Grundeinstellungen starten. Für uns werden ausschließlich Identität, Messwerte und Logs benötigt.");
+        intro.setPadding(0, dp(6), 0, dp(10));
+        content.addView(intro);
+
+        ScrollView sv = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+
+        String[] steps = new String[] {
+                "1  AUTO-SCAN\nKompletten Fahrzeug-Auto-Scan ausführen und speichern.",
+                "2  01-MOTOR → ERWEITERTE ID\nTeilenummer, Softwarestand, ASAM/ODX-Kennung, Motorsteuergerät-Identität sichern.",
+                "3  CONTROLLER CHANNELS MAP → 01-MOTOR\nMesswerte als CSV/PLB erzeugen. Ausgabe vollständig speichern.",
+                "4  01-MOTOR → ERWEITERTE MESSWERTE\nLeerlauf-Log mit Drehzahl, Geschwindigkeit, Kühlmittel, Öltemperatur, Ansaugluft, Umgebungsdruck, Saugrohr-/Ladedruck, Luftmasse, Drosselklappe, Pedal, Bordspannung, Zündwinkel, Last und Kraftstoffkorrekturen.",
+                "5  LADEDRUCK\nFalls getrennt vorhanden: Soll-Ladedruck und Ist-Ladedruck mitloggen.",
+                "6  KRAFTSTOFF\nRaildruck Soll/Ist, Einspritzzeit, Lambda Soll/Ist und Kraftstoffkorrekturen auswählen, soweit VCDS sie für dieses Steuergerät anbietet.",
+                "7  ZÜNDUNG / KLOPFREGELUNG\nZündwinkel sowie Klopf-/Zündwinkelrücknahme je Zylinder auswählen, soweit vorhanden.",
+                "8  NOCKENWELLE / STEUERZEITEN\nSoll/Ist-Winkel bzw. Anpassungswerte sichern, soweit vorhanden.",
+                "9  FEHLZÜNDUNGEN\nMisfire-Zähler Zylinder 1-4 auswählen, soweit vorhanden.",
+                "10  ELEKTRIK\nSteuergeräte-/Batteriespannung und Generatorlast bzw. Generatorwerte sichern, soweit vorhanden.",
+                "11  LIVE-LOG LEERLAUF\nMotor warm, 2-3 Minuten loggen.",
+                "12  LIVE-LOG 2000 RPM\nIm Stand nur falls sicher und zulässig: ca. 30 Sekunden stabil um 2000 rpm loggen.",
+                "13  DATEIEN SICHERN\nAuto-Scan, Channel-Map und alle CSV-Logs anschließend gemeinsam bereitstellen."
+        };
+
+        for (String step : steps) {
+            TextView v = body(step);
+            v.setTextColor(TEXT);
+            v.setTextSize(16);
+            v.setBackgroundColor(PANEL);
+            v.setPadding(dp(14), dp(12), dp(14), dp(12));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+            lp.setMargins(0, dp(4), 0, dp(4));
+            list.addView(v, lp);
+        }
+
+        sv.addView(list);
+        content.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
     }
 
     private void showApps() {
@@ -435,7 +482,9 @@ public class MainActivity extends Activity {
         logCommand("ATS0", send("ATS0"));
         logCommand("ATH0", send("ATH0"));
         logCommand("ATSP0", send("ATSP0"));
-        logCommand("ATDP", send("ATDP"));
+        String dp = send("ATDP");
+        protocolName = dp == null || dp.trim().isEmpty() ? "unbekannt" : dp.trim();
+        logCommand("ATDP", dp);
         logCommand("ATDPN", send("ATDPN"));
     }
 
@@ -561,7 +610,19 @@ public class MainActivity extends Activity {
                     break;
                 }
             }
-            String txt = label + "\n" + value + " " + unit;
+            double numeric;
+            try { numeric = Double.parseDouble(value.replace(',', '.')); } catch (Exception ex) { numeric = Double.NaN; }
+            if (!Double.isNaN(numeric)) {
+                Double min = minSeen.get(label);
+                Double max = maxSeen.get(label);
+                if (min == null || numeric < min) minSeen.put(label, numeric);
+                if (max == null || numeric > max) maxSeen.put(label, numeric);
+            }
+            String range = "";
+            if (minSeen.containsKey(label) && maxSeen.containsKey(label)) {
+                range = "\nmin " + fmt(minSeen.get(label)) + "  max " + fmt(maxSeen.get(label));
+            }
+            String txt = label + "\n" + value + " " + unit + range;
             if (found != null) {
                 found.setText(txt);
             } else {
@@ -585,6 +646,8 @@ public class MainActivity extends Activity {
     private void resetLog() {
         synchronized (logLock) {
             csvLog.setLength(0);
+            minSeen.clear();
+            maxSeen.clear();
             csvLog.append("timestamp;elapsed_ms;pid;label;raw_response;decoded_value;unit;status\n");
             logRows = 0;
             logStartedAt = System.currentTimeMillis();
