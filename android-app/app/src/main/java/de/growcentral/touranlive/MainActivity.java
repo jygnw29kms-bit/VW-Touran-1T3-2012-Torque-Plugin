@@ -72,6 +72,8 @@ public class MainActivity extends Activity {
     private BufferedReader reader;
     private OutputStream writer;
     private volatile boolean polling = false;
+    private volatile boolean vagMode = false;
+    private VagTp20 vag;
 
     private LinearLayout content;
     private TextView connectionBadge;
@@ -645,12 +647,28 @@ public class MainActivity extends Activity {
                 writer = socket.getOutputStream();
                 reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
 
+                VagTp20 candidate = new VagTp20(reader, writer, this::appendSystemLog);
+                if (candidate.openEngine()) {
+                    vag = candidate;
+                    vagMode = true;
+                    polling = true;
+                    protocolName = "VAG TP2.0 / KWP2000";
+                    appendSystemLog("CONNECTED_VAG", target.getName());
+                    setConnectionState("VAG: verbunden", OK);
+                    postStatus("CAVC via VAG TP2.0/KWP2000 verbunden. VCDS-Messwertbloecke werden live gelesen.");
+                    pollVagLoop();
+                    return;
+                }
+
+                vag = null;
+                vagMode = false;
+                appendSystemLog("VAG_FALLBACK", "TP2.0/KWP2000 nicht verfuegbar; Standard-OBD wird verwendet");
                 initElm();
                 discoverSupportedPids();
                 polling = true;
-                appendSystemLog("CONNECTED", target.getName());
+                appendSystemLog("CONNECTED_OBD", target.getName());
                 setConnectionState("OBD: verbunden", OK);
-                postStatus("ECU verbunden. Angezeigt werden nur bestätigte Live-Werte.");
+                postStatus("Standard-OBD aktiv. VAG-Direktzugriff war mit diesem Adapter nicht verfuegbar.");
                 pollLoop();
             } catch (Exception e) {
                 appendSystemLog("CONNECT_ERROR", safe(e.getMessage()));
@@ -719,6 +737,128 @@ public class MainActivity extends Activity {
             boolean yes = (bits & (1L << (32-n))) != 0;
             support.put(String.format(Locale.ROOT, "01%02X", base+n), yes);
         }
+    }
+
+    private void pollVagLoop() {
+        // Groups are taken from this car's VCDS engine blockmap (MED17.5.5 / CAVC).
+        final int[] fastGroups = {4, 5, 3, 115};
+        final int[] slowGroups = {113, 134, 210, 106, 31, 32, 20, 90, 91, 93, 15, 16};
+        int fast=0, slow=0, cycle=0;
+        while (polling && vagMode && vag != null && vag.isOpen() && socket != null && socket.isConnected()) {
+            try {
+                applyVagBlock(vag.readBlock(fastGroups[fast++ % fastGroups.length]));
+                if ((cycle++ % 4) == 0) applyVagBlock(vag.readBlock(slowGroups[slow++ % slowGroups.length]));
+                if ((cycle % 20) == 0) vag.keepAlive();
+            } catch (Exception e) {
+                appendSystemLog("VAG_READ_ERROR", safe(e.getMessage()));
+                try { if (vag != null) vag.close(); } catch (Exception ignored) {}
+                vag = null;
+                vagMode = false;
+                try {
+                    initElm();
+                    discoverSupportedPids();
+                    protocolName = "Standard OBD (VAG fallback)";
+                    postStatus("VAG session lost; Standard-OBD remains active.");
+                    pollLoop();
+                } catch (Exception fallbackError) {
+                    appendSystemLog("OBD_FALLBACK_ERROR", safe(fallbackError.getMessage()));
+                    polling = false;
+                }
+                break;
+            }
+        }
+    }
+
+    private void applyVagBlock(VagTp20.Block b) {
+        if (b == null) return;
+        appendSystemLog("VAG_MWB_" + b.group, b.raw);
+        switch (b.group) {
+            case 3:
+                putVag("Drehzahl", b.value(1));
+                putVag("VAG_Manifold", b.value(2));
+                putVag("Motorlast", b.value(3));
+                putVag("VAG_Ignition", signedTiming(b,4));
+                break;
+            case 4:
+                putVag("Drehzahl", b.value(1));
+                putVag("VAG_Voltage", b.value(2));
+                putVag("VAG_Coolant", b.value(3));
+                putVag("VAG_IntakeTemp", b.value(4));
+                break;
+            case 5:
+                putVag("Drehzahl", b.value(1));
+                putVag("Motorlast", b.value(2));
+                putVag("Geschwindigkeit", b.value(3));
+                break;
+            case 15:
+                putVag("VAG_Misfire1", b.value(1)); putVag("VAG_Misfire2", b.value(2)); putVag("VAG_Misfire3", b.value(3));
+                break;
+            case 16:
+                putVag("VAG_Misfire4", b.value(1));
+                break;
+            case 20:
+                putVag("VAG_Knock1", signedTiming(b,1)); putVag("VAG_Knock2", signedTiming(b,2));
+                putVag("VAG_Knock3", signedTiming(b,3)); putVag("VAG_Knock4", signedTiming(b,4));
+                break;
+            case 31:
+                putVag("VAG_LambdaActual", b.value(1)); putVag("VAG_LambdaTarget", b.value(2));
+                break;
+            case 32:
+                putVag("VAG_AdaptIdle", b.value(1)); putVag("VAG_AdaptPart", b.value(2));
+                break;
+            case 90:
+                putVag("VAG_CamActual", b.value(3));
+                break;
+            case 91:
+                putVag("VAG_CamTarget", b.value(3)); putVag("VAG_CamActual", b.value(4));
+                break;
+            case 93:
+                putVag("VAG_CamAdapt", b.value(1));
+                break;
+            case 106:
+                putVag("VAG_Rail", b.value(1));
+                break;
+            case 113:
+                putVag("VAG_AmbientPressure", b.value(4));
+                break;
+            case 115:
+                putVag("Drehzahl", b.value(1)); putVag("Motorlast", b.value(2));
+                putVag("VAG_BoostTargetAbs", b.value(3)); putVag("VAG_BoostActualAbs", b.value(4));
+                break;
+            case 134:
+                putVag("VAG_OilTemp", b.value(1));
+                break;
+            case 210:
+                putVag("VAG_MAF", b.value(3));
+                break;
+        }
+        updateDerivedVagValues();
+    }
+
+    private Double signedTiming(VagTp20.Block b, int field) {
+        if (b == null || field < 1 || field > b.cells.length) return null;
+        VagTp20.Cell c = b.cells[field-1];
+        if (c.value == null) return null;
+        return c.unit != null && c.unit.contains("n.OT") ? -c.value : c.value;
+    }
+
+    private void putVag(String key, Double value) {
+        if (value == null || value.isNaN() || value.isInfinite()) return;
+        ui.post(() -> {
+            liveValues.put(key, value);
+            if (dashboardView != null) dashboardView.invalidate();
+        });
+    }
+
+    private void updateDerivedVagValues() {
+        ui.post(() -> {
+            Double amb = liveValues.get("VAG_AmbientPressure");
+            Double actual = liveValues.get("VAG_BoostActualAbs");
+            Double target = liveValues.get("VAG_BoostTargetAbs");
+            if (amb != null && actual != null) liveValues.put("VAG_BoostActualRel", (actual - amb) / 1000.0);
+            if (amb != null && target != null) liveValues.put("VAG_BoostTargetRel", (target - amb) / 1000.0);
+            if (dashboardView != null) dashboardView.invalidate();
+        });
     }
 
     private void pollLoop() {
@@ -1086,17 +1226,17 @@ public class MainActivity extends Activity {
             txt(c,"VW",50,42,16,TEXT,Paint.Align.CENTER,true);
             txt(c,"TouranLive",94,44,26,TEXT,Paint.Align.LEFT,true);
             txt(c,"Fahrzeugansicht (MFA) – Seite "+(mfaPage+1)+"/4",832,42,24,Color.rgb(190,195,201),Paint.Align.CENTER,false);
-            txt(c,"VW Touran 1T3  |  CAVC MED17.5.5  |  VCDS-Mapping",1600,42,17,Color.rgb(180,185,191),Paint.Align.RIGHT,false);
+            txt(c,"VW Touran 1T3 | CAVC MED17.5.5 | VCDS + VAG TP2.0/KWP2000",1600,42,17,Color.rgb(180,185,191),Paint.Align.RIGHT,false);
 
             gauge(c,300,344,270,8000,"Drehzahl",true);
             gauge(c,1365,344,270,240,"Geschwindigkeit",false);
             miniGauge(c,178,592,96,"Kühlmittel","Kühlmittel","°C",50,130);
-            miniGauge(c,425,592,96,"Öltemp. • VAG 134.1","__VAG_OIL__","°C",50,150);
-            miniGauge(c,1236,592,96,"Bordspannung","ECU-Spannung","V",10,16);
+            miniGauge(c,425,592,96,"Oeltemp | VAG 134.1","VAG_OilTemp","C",50,150);
+            miniGauge(c,1236,592,96,"Bordspannung",vagMode?"VAG_Voltage":"ECU-Spannung","V",10,16);
             miniGauge(c,1484,592,96,"Außentemperatur","Außentemperatur","°C",-20,40);
 
             round(c,Color.rgb(8,11,14),582,76,1082,699,16); strokeRound(c,Color.rgb(38,43,48),582,76,1082,699,16,2);
-            String[] pageNames={"Fahrt • OBD","Temperaturen","Gemisch / Abgas","Last / Pedal"};
+            String[] pageNames={"Fahrt | VAG","Temperaturen","Gemisch / Kraftstoff","Zuendung / Zylinder"};
             txt(c,"‹",622,140,42,TEXT,Paint.Align.CENTER,true);
             txt(c,(mfaPage+1)+"/4",762,137,24,Color.rgb(195,199,204),Paint.Align.CENTER,false);
             txt(c,pageNames[mfaPage],837,137,28,TEXT,Paint.Align.CENTER,true);
@@ -1106,33 +1246,33 @@ public class MainActivity extends Activity {
             if(mfaPage==0){
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Saugrohrdruck • OBD 0B",622,207,18,MUTED,Paint.Align.LEFT,false); txt(c,val("Saugrohrdruck","kPa"),721,276,34,TEXT,Paint.Align.CENTER,true);
-                txt(c,"rel. zu Umgebung",628,350,17,MUTED,Paint.Align.LEFT,false); txt(c,val("Saugrohrdruck rel.","bar"),780,350,18,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Motorlast",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,n("Motorlast"),950,286,44,TEXT,Paint.Align.CENTER,true); txt(c,"%",950,347,20,MUTED,Paint.Align.CENTER,false);
-                mfaRow(c,405,"Kraftstoffdruck","Kraftstoffdruck","bar"); mfaRow(c,468,"Drosselklappe","Drosselklappe","%"); mfaRow(c,531,"Gaspedalstellung","Pedalstellung","%"); mfaRow(c,594,"Zündwinkel","Zündwinkel","°KW");
+                txt(c,"Ladedruck Ist | VAG 115.4",622,207,18,MUTED,Paint.Align.LEFT,false); txt(c,val("VAG_BoostActualAbs","mbar abs"),721,276,30,TEXT,Paint.Align.CENTER,true);
+                txt(c,"rel. zu Umgebung",628,350,17,MUTED,Paint.Align.LEFT,false); txt(c,val("VAG_BoostActualRel","bar"),780,350,18,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Ladedruck Soll | VAG 115.3",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_BoostTargetAbs","mbar"),950,286,30,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Luftmasse | VAG 210.3","VAG_MAF","g/s"); mfaRow(c,468,"Motorlast | VAG 115.2","Motorlast","%"); mfaRow(c,531,"Raildruck Ist | VAG 106.1","VAG_Rail","bar"); mfaRow(c,594,"Zuendwinkel | VAG 003.4","VAG_Ignition","deg");
             } else if(mfaPage==1){
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Öltemperatur • VAG 134.1",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,"—",721,286,38,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Kühlmittel",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Kühlmittel","°C"),950,286,38,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Ansaugluft","Ansaugluft","°C"); mfaRow(c,468,"Außentemperatur","Außentemperatur","°C"); mfaRow(c,531,"Bordspannung","ECU-Spannung","V"); mfaRow(c,594,"Umgebungsdruck","Umgebungsdruck","kPa");
+                txt(c,"Oeltemperatur | VAG 134.1",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_OilTemp","C"),721,286,38,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Kuehlmittel | VAG 004.3",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_Coolant","C"),950,286,38,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Ansaugluft | VAG 004.4","VAG_IntakeTemp","C"); mfaRow(c,468,"Luftmasse | VAG 210.3","VAG_MAF","g/s"); mfaRow(c,531,"Bordspannung | VAG 004.2","VAG_Voltage","V"); mfaRow(c,594,"Umgebungsdruck | VAG 113.4","VAG_AmbientPressure","mbar");
             } else if(mfaPage==2){
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Kraftstoffdruck",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Kraftstoffdruck","bar"),721,286,34,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Lambda Ist",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Lambda Ist","λ"),950,286,34,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Lambda Soll","Lambda Soll","λ"); mfaRow(c,468,"Fuel Trim kurz","Fuel Trim kurz","%"); mfaRow(c,531,"Fuel Trim lang","Fuel Trim lang","%"); mfaRow(c,594,"Kat-Temperatur","Kat-Temperatur","°C");
+                txt(c,"Raildruck Ist | VAG 106.1",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_Rail","bar"),721,286,34,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Lambda Ist | VAG 031.1",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_LambdaActual","lambda"),950,286,34,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Lambda Soll | VAG 031.2","VAG_LambdaTarget","lambda"); mfaRow(c,468,"Adapt. Leerlauf | VAG 032.1","VAG_AdaptIdle","%"); mfaRow(c,531,"Adapt. Teillast | VAG 032.2","VAG_AdaptPart","%"); mfaRow(c,594,"Luftmasse | VAG 210.3","VAG_MAF","g/s");
             } else {
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Zündwinkel",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Zündwinkel","°KW"),721,286,38,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Absolute Last",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Absolute Last","%"),950,286,38,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Tankentlüftung","Tankentlüftung","%"); mfaRow(c,468,"Drossel relativ","Drossel relativ","%"); mfaRow(c,531,"Drossel B","Drossel B","%"); mfaRow(c,594,"Pedal E","Pedalstellung E","%");
+                txt(c,"Klopfruecknahme Zyl. 1",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_Knock1","deg"),721,286,34,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Nockenwelle Ist | VAG 091.4",950,207,17,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_CamActual","deg"),950,286,34,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Klopfen Zyl. 2 | VAG 020.2","VAG_Knock2","deg"); mfaRow(c,468,"Klopfen Zyl. 3 | VAG 020.3","VAG_Knock3","deg"); mfaRow(c,531,"Klopfen Zyl. 4 | VAG 020.4","VAG_Knock4","deg"); mfaRow(c,594,"Misfire Zyl. 1 | VAG 015.1","VAG_Misfire1","count");
             }
             for(int i=0;i<4;i++){ p.setStyle(Paint.Style.FILL); p.setColor(i==mfaPage?RED:Color.rgb(70,76,82)); c.drawCircle(X(790+i*31),Y(669),S(i==mfaPage?8:7),p); }
 
             fill(c,Color.rgb(5,8,10),0,706,1664,798); line(c,Color.rgb(52,57,62),1.5f,0,706,1664,706);
-            txt(c,polling?"OBD verbunden":"OBD getrennt",148,751,21,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"—",148,779,15,MUTED,Paint.Align.LEFT,false);
+            txt(c,polling?(vagMode?"VAG verbunden":"OBD verbunden"):"OBD getrennt",148,751,21,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"—",148,779,15,MUTED,Paint.Align.LEFT,false);
             txt(c,"●",521,760,35,RED,Paint.Align.CENTER,true); txt(c,"Logger "+(polling?"aktiv":"bereit"),565,750,21,TEXT,Paint.Align.LEFT,true); txt(c,logRows+" Logzeilen",565,777,15,MUTED,Paint.Align.LEFT,false);
             int dc="Keine Fehler gemeldet".equals(dtcStatus)?OK:("nicht geprüft".equals(dtcStatus)?MUTED:RED); txt(c,"DTC",1128,746,18,dc,Paint.Align.LEFT,true); txt(c,dtcStatus,1128,776,16,dc,Paint.Align.LEFT,false);
             txt(c,new SimpleDateFormat("HH:mm",Locale.GERMANY).format(new Date()),1609,746,20,TEXT,Paint.Align.RIGHT,true); txt(c,new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date()),1609,775,15,MUTED,Paint.Align.RIGHT,false);
@@ -1313,6 +1453,9 @@ public class MainActivity extends Activity {
     }
 
     private void closeSocket() {
+        try { if (vag != null) vag.close(); } catch (Exception ignored) {}
+        vag = null;
+        vagMode = false;
         try { if (socket != null) socket.close(); } catch (Exception ignored) {}
         socket = null;
         reader = null;
