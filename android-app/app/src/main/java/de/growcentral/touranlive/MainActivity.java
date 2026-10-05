@@ -653,6 +653,8 @@ public class MainActivity extends Activity {
 
                 initElm();
                 discoverSupportedPids();
+                probeUnadvertisedPid("0110"); // MAF: bei diesem MED17.5.5 nicht in der OBD-Map gelistet
+                probeUnadvertisedPid("015C"); // Öltemperatur: VCDS liefert sie über MWB 134.1
                 polling = true;
                 appendSystemLog("CONNECTED", target.getName());
                 setConnectionState("OBD: verbunden", OK);
@@ -690,6 +692,23 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void probeUnadvertisedPid(String cmd) {
+        Pid target = null;
+        for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
+        if (target == null) return;
+        try {
+            String raw = send(cmd);
+            Double value = decode(cmd, raw);
+            appendPidLog(target, raw, value, "PROBE_" + classify(raw, value));
+            if (value != null) {
+                support.put(cmd, true);
+                updateTile(target.label, fmt(value), target.unit);
+            }
+        } catch (Exception e) {
+            appendPidLog(target, "", null, "PROBE_ERROR:" + safe(e.getMessage()));
+        }
+    }
+
     private void markSupportBlock(String cmd, String raw) {
         String s = raw == null ? "" : raw.replaceAll("[^0-9A-Fa-f]", "").toUpperCase(Locale.ROOT);
         String key = "41" + cmd.substring(2);
@@ -707,23 +726,39 @@ public class MainActivity extends Activity {
     }
 
     private void pollLoop() {
-        // Priorisierte Abfrage: RPM + Speed in jedem Zyklus, dynamische Motorwerte rotierend,
-        // Temperaturen/Spannung deutlich seltener. So bleiben die Instrumente fluessig,
-        // ohne den ELM327 mit allen PIDs pro Runde zu blockieren.
+        // Fast lane: RPM + Geschwindigkeit werden ohne künstliche Pause permanent abgefragt.
+        // Andere Werte werden nur zwischengestreut, damit sie die Instrumente nicht ausbremsen.
         final String[] dynamic = {"010B","0104","0110","0111","0149","010E","0123","0134","0144"};
-        final String[] medium  = {"0106","0107","0143","0145","0147","014A","014C","012E","0156","0162","0163","015E"};
-        final String[] slow    = {"0105","015C","010F","0146","0142","0133","013C","011F","0121","0130","0131","012F"};
+        final String[] medium  = {"0106","0107","0143","0145","0147","014A","014C","012E","0156"};
+        final String[] slow    = {"0105","015C","010F","0146","0142","0133","013C","011F","0121","0130","0131"};
         int cycle = 0, dyn = 0, med = 0, slw = 0;
         while (polling && socket != null && socket.isConnected()) {
-            pollPid("010C"); // Drehzahl - hoechste Prioritaet
+            pollFastPid("010C");
             if (!polling) break;
-            pollPid("010D"); // Geschwindigkeit - hoechste Prioritaet
+            pollFastPid("010D");
             if (!polling) break;
 
-            pollPid(dynamic[dyn++ % dynamic.length]);
-            if ((cycle & 1) == 0) pollPid(medium[med++ % medium.length]);
-            if (cycle % 8 == 0) pollPid(slow[slw++ % slow.length]);
+            // Nur gelegentlich einen weiteren PID dazwischen schieben.
+            if ((cycle & 3) == 0) pollPid(dynamic[dyn++ % dynamic.length]);
+            if (cycle % 12 == 0) pollPid(medium[med++ % medium.length]);
+            if (cycle % 40 == 0) pollPid(slow[slw++ % slow.length]);
             cycle++;
+        }
+    }
+
+    private void pollFastPid(String cmd) {
+        if (!polling || !Boolean.TRUE.equals(support.get(cmd))) return;
+        Pid target = null;
+        for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
+        if (target == null) return;
+        try {
+            String raw = sendFast(cmd);
+            Double value = decode(cmd, raw);
+            String state = classify(raw, value);
+            appendPidLog(target, raw, value, state);
+            if (value != null) updateTile(target.label, fmt(value), target.unit);
+        } catch (Exception e) {
+            appendPidLog(target, "", null, "ERROR:" + safe(e.getMessage()));
         }
     }
 
@@ -741,6 +776,25 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             appendPidLog(target, "", null, "ERROR:" + safe(e.getMessage()));
         }
+    }
+
+    private String sendFast(String cmd) throws Exception {
+        writer.write((cmd + "\r").getBytes(StandardCharsets.US_ASCII));
+        writer.flush();
+        StringBuilder sb = new StringBuilder();
+        long end = System.currentTimeMillis() + 300;
+        while (System.currentTimeMillis() < end) {
+            if (reader.ready()) {
+                int c = reader.read();
+                if (c < 0) break;
+                char ch = (char)c;
+                if (ch == '>') break;
+                sb.append(ch);
+            } else {
+                Thread.sleep(1);
+            }
+        }
+        return sb.toString().replace("\r", " ").replace("\n", " ").trim();
     }
 
     private String sendLive(String cmd) throws Exception {
@@ -856,7 +910,9 @@ public class MainActivity extends Activity {
                 Double map = liveValues.get("Saugrohrdruck");
                 Double baro = liveValues.get("Umgebungsdruck");
                 if (map != null && baro != null) {
-                    liveValues.put("Ladedruck", (map - baro) / 100.0);
+                    // PID 0B ist der Saugrohr-Absolutdruck hinter der Drosselklappe.
+                    // Er ist beim CAVC NICHT identisch mit dem VAG-Ladedruck aus MWB 115.
+                    liveValues.put("Saugrohrdruck rel.", (map - baro) / 100.0);
                 }
                 if (dashboardView != null) dashboardView.invalidate();
             }
@@ -916,11 +972,13 @@ public class MainActivity extends Activity {
                     Double old = displayValues.get(e.getKey());
                     double target = e.getValue();
                     if (old == null) displayValues.put(e.getKey(), target);
-                    else {
-                        double factor = ("Drehzahl".equals(e.getKey()) || "Geschwindigkeit".equals(e.getKey()) ||
-                                "Saugrohrdruck".equals(e.getKey()) || "Ladedruck".equals(e.getKey()) ||
-                                "Motorlast".equals(e.getKey())) ? 0.38 : 0.22;
-                        double next = old + (target - old) * factor;
+                    else if ("Drehzahl".equals(e.getKey()) || "Geschwindigkeit".equals(e.getKey()) ||
+                            "Saugrohrdruck".equals(e.getKey()) || "Motorlast".equals(e.getKey()) ||
+                            "Pedalstellung".equals(e.getKey()) || "Drosselklappe".equals(e.getKey())) {
+                        // Schnell bewegte Anzeigen ohne zusätzliche UI-Glättung/Latenz.
+                        displayValues.put(e.getKey(), target);
+                    } else {
+                        double next = old + (target - old) * 0.30;
                         if (Math.abs(target-next) < 0.05) next = target;
                         displayValues.put(e.getKey(), next);
                     }
@@ -1044,7 +1102,7 @@ public class MainActivity extends Activity {
             gauge(c,300,344,270,8000,"Drehzahl",true);
             gauge(c,1365,344,270,240,"Geschwindigkeit",false);
             miniGauge(c,178,592,96,"Kühlmittel","Kühlmittel","°C",50,130);
-            miniGauge(c,425,592,96,"Öltemperatur","Öltemperatur","°C",50,150);
+            miniGauge(c,425,592,96,v("Öltemperatur")==null?"Öltemp. • VAG 134.1":"Öltemperatur","Öltemperatur","°C",50,150);
             miniGauge(c,1236,592,96,"Bordspannung","ECU-Spannung","V",10,16);
             miniGauge(c,1484,592,96,"Außentemperatur","Außentemperatur","°C",-20,40);
 
@@ -1059,14 +1117,14 @@ public class MainActivity extends Activity {
             if(mfaPage==0){
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Ladedruck (Ist)",622,207,18,MUTED,Paint.Align.LEFT,false); txt(c,val("Ladedruck","bar"),721,276,34,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Soll",628,350,17,MUTED,Paint.Align.LEFT,false); txt(c,"—",780,350,18,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Ladedruck (Ist) • VAG 115",622,207,18,MUTED,Paint.Align.LEFT,false); txt(c,val("Ladedruck","bar"),721,276,34,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Soll • VAG 115",628,350,17,MUTED,Paint.Align.LEFT,false); txt(c,"—",780,350,18,TEXT,Paint.Align.CENTER,true);
                 txt(c,"Motorlast",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,n("Motorlast"),950,286,44,TEXT,Paint.Align.CENTER,true); txt(c,"%",950,347,20,MUTED,Paint.Align.CENTER,false);
-                mfaRow(c,405,"Luftmasse (MAF)","Luftmasse","g/s"); mfaRow(c,468,"Drosselklappe","Drosselklappe","%"); mfaRow(c,531,"Gaspedalstellung","Pedalstellung","%"); mfaRow(c,594,"Zündwinkel","Zündwinkel","°KW");
+                mfaRow(c,405,v("Luftmasse")==null?"Luftmasse • VAG 210.3":"Luftmasse (MAF)","Luftmasse","g/s"); mfaRow(c,468,"Drosselklappe","Drosselklappe","%"); mfaRow(c,531,"Gaspedalstellung","Pedalstellung","%"); mfaRow(c,594,"Zündwinkel","Zündwinkel","°KW");
             } else if(mfaPage==1){
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Öltemperatur",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Öltemperatur","°C"),721,286,38,TEXT,Paint.Align.CENTER,true);
+                txt(c,v("Öltemperatur")==null?"Öltemperatur • VAG 134.1":"Öltemperatur",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Öltemperatur","°C"),721,286,38,TEXT,Paint.Align.CENTER,true);
                 txt(c,"Kühlmittel",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Kühlmittel","°C"),950,286,38,TEXT,Paint.Align.CENTER,true);
                 mfaRow(c,405,"Ansaugluft","Ansaugluft","°C"); mfaRow(c,468,"Außentemperatur","Außentemperatur","°C"); mfaRow(c,531,"Bordspannung","ECU-Spannung","V"); mfaRow(c,594,"Umgebungsdruck","Umgebungsdruck","kPa");
             } else if(mfaPage==2){
