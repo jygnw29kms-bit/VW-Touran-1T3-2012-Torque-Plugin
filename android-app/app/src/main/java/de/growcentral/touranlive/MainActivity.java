@@ -873,6 +873,8 @@ public class MainActivity extends Activity {
         private final Map<String, Double> displayValues = new LinkedHashMap<>();
         private float sx=1f, sy=1f;
         private boolean animatorRunning = false;
+        private int mfaPage = 0;
+        private float touchDownX = -1f;
         private final Runnable animator = new Runnable() {
             @Override public void run() {
                 if (!animatorRunning) return;
@@ -1002,7 +1004,7 @@ public class MainActivity extends Activity {
             p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(S(3));p.setColor(TEXT);c.drawCircle(X(50),Y(35),S(20),p);
             txt(c,"VW",50,42,16,TEXT,Paint.Align.CENTER,true);
             txt(c,"TouranLive",94,44,26,TEXT,Paint.Align.LEFT,true);
-            txt(c,"Fahrzeugansicht (MFA) – Seite 1/4",832,42,24,Color.rgb(190,195,201),Paint.Align.CENTER,false);
+            txt(c,"Fahrzeugansicht (MFA) – Seite "+(mfaPage+1)+"/4",832,42,24,Color.rgb(190,195,201),Paint.Align.CENTER,false);
             txt(c,"VW Touran 1T3  |  CAVC 1.4 TSI  |  OBD Live",1600,42,17,Color.rgb(180,185,191),Paint.Align.RIGHT,false);
 
             gauge(c,300,344,270,8000,"Drehzahl",true);
@@ -1013,15 +1015,41 @@ public class MainActivity extends Activity {
             miniGauge(c,1484,592,96,"Außentemperatur","Außentemperatur","°C",-20,40);
 
             round(c,Color.rgb(8,11,14),582,76,1082,699,16); strokeRound(c,Color.rgb(38,43,48),582,76,1082,699,16,2);
-            txt(c,"‹",622,140,42,TEXT,Paint.Align.CENTER,true); txt(c,"1/4",762,137,24,Color.rgb(195,199,204),Paint.Align.CENTER,false); txt(c,"Fahrt",837,137,28,TEXT,Paint.Align.CENTER,true); txt(c,"›",1040,140,42,TEXT,Paint.Align.CENTER,true);
+            String[] pageNames={"Fahrt","Temperaturen","Motor / Diagnose","Zündung / Zylinder"};
+            txt(c,"‹",622,140,42,TEXT,Paint.Align.CENTER,true);
+            txt(c,(mfaPage+1)+"/4",762,137,24,Color.rgb(195,199,204),Paint.Align.CENTER,false);
+            txt(c,pageNames[mfaPage],837,137,28,TEXT,Paint.Align.CENTER,true);
+            txt(c,"›",1040,140,42,TEXT,Paint.Align.CENTER,true);
             line(c,RED,3,605,156,1058,156);
-            round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
-            round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-            txt(c,"Ladedruck (Ist)",622,207,18,MUTED,Paint.Align.LEFT,false); txt(c,val("Ladedruck","bar"),721,276,34,TEXT,Paint.Align.CENTER,true);
-            txt(c,"Soll",628,350,17,MUTED,Paint.Align.LEFT,false); txt(c,"—",780,350,18,TEXT,Paint.Align.CENTER,true);
-            txt(c,"Motorlast",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,n("Motorlast"),950,286,44,TEXT,Paint.Align.CENTER,true); txt(c,"%",950,347,20,MUTED,Paint.Align.CENTER,false);
-            mfaRow(c,405,"Luftmasse (MAF)","Luftmasse","g/s"); mfaRow(c,468,"Drosselklappe","Drosselklappe","%"); mfaRow(c,531,"Gaspedalstellung","Pedalstellung","%"); mfaRow(c,594,"Zündwinkel","Zündwinkel","°KW");
-            p.setStyle(Paint.Style.FILL);p.setColor(RED);c.drawCircle(X(790),Y(669),S(8),p); p.setColor(Color.rgb(70,76,82));c.drawCircle(X(821),Y(669),S(7),p);c.drawCircle(X(852),Y(669),S(7),p);c.drawCircle(X(883),Y(669),S(7),p);
+
+            if(mfaPage==0){
+                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
+                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
+                txt(c,"Ladedruck (Ist)",622,207,18,MUTED,Paint.Align.LEFT,false); txt(c,val("Ladedruck","bar"),721,276,34,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Soll",628,350,17,MUTED,Paint.Align.LEFT,false); txt(c,"—",780,350,18,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Motorlast",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,n("Motorlast"),950,286,44,TEXT,Paint.Align.CENTER,true); txt(c,"%",950,347,20,MUTED,Paint.Align.CENTER,false);
+                mfaRow(c,405,"Luftmasse (MAF)","Luftmasse","g/s"); mfaRow(c,468,"Drosselklappe","Drosselklappe","%"); mfaRow(c,531,"Gaspedalstellung","Pedalstellung","%"); mfaRow(c,594,"Zündwinkel","Zündwinkel","°KW");
+            } else if(mfaPage==1){
+                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
+                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
+                txt(c,"Öltemperatur",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Öltemperatur","°C"),721,286,38,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Kühlmittel",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Kühlmittel","°C"),950,286,38,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Ansaugluft","Ansaugluft","°C"); mfaRow(c,468,"Außentemperatur","Außentemperatur","°C"); mfaRow(c,531,"Bordspannung","ECU-Spannung","V"); mfaRow(c,594,"Umgebungsdruck","Umgebungsdruck","kPa");
+            } else if(mfaPage==2){
+                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
+                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
+                txt(c,"Kraftstoffrate",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Kraftstoffrate","L/h"),721,286,34,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Drehmoment Ist",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Drehmoment Ist","%"),950,286,34,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Referenzmoment","Referenzmoment","Nm"); mfaRow(c,468,"Tankfüllstand","Tank","%"); mfaRow(c,531,"Drossel Soll","Drossel Soll","%"); mfaRow(c,594,"DTC Status","__NONE__","");
+                txt(c,dtcStatus,1028,598,17,"Keine Fehler gemeldet".equals(dtcStatus)?OK:MUTED,Paint.Align.RIGHT,true);
+            } else {
+                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
+                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
+                txt(c,"Zündwinkel",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Zündwinkel","°KW"),721,286,38,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Klopfrücknahme",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,"—",950,286,38,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Zylinder 1","__NONE__",""); mfaRow(c,468,"Zylinder 2","__NONE__",""); mfaRow(c,531,"Zylinder 3","__NONE__",""); mfaRow(c,594,"Zylinder 4","__NONE__","");
+            }
+            for(int i=0;i<4;i++){ p.setStyle(Paint.Style.FILL); p.setColor(i==mfaPage?RED:Color.rgb(70,76,82)); c.drawCircle(X(790+i*31),Y(669),S(i==mfaPage?8:7),p); }
 
             fill(c,Color.rgb(5,8,10),0,706,1664,798); line(c,Color.rgb(52,57,62),1.5f,0,706,1664,706);
             txt(c,polling?"OBD verbunden":"OBD getrennt",148,751,21,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"—",148,779,15,MUTED,Paint.Align.LEFT,false);
@@ -1033,8 +1061,9 @@ public class MainActivity extends Activity {
         }
 
         @Override public boolean onTouchEvent(android.view.MotionEvent e){
-            if(e.getAction()!=android.view.MotionEvent.ACTION_UP) return true;
             float x=e.getX()/sx,y=e.getY()/sy;
+            if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){ touchDownX=x; return true; }
+            if(e.getAction()!=android.view.MotionEvent.ACTION_UP) return true;
             if(y>=812){
                 if(x<347){ invalidate(); return true; }
                 if(x<664){ buildShell(); showHome(); return true; }
@@ -1044,6 +1073,12 @@ public class MainActivity extends Activity {
                 buildShell(); showVcds(); return true;
             }
             if(y>=706 && y<798 && x<430){ if(polling) disconnect(); else connect(); return true; }
+            if(y>=76 && y<=699 && x>=582 && x<=1082){
+                float dx=x-touchDownX;
+                if(Math.abs(dx)>70){ mfaPage=(mfaPage+(dx<0?1:3))%4; invalidate(); return true; }
+                if(y<180 && x<700){ mfaPage=(mfaPage+3)%4; invalidate(); return true; }
+                if(y<180 && x>970){ mfaPage=(mfaPage+1)%4; invalidate(); return true; }
+            }
             return true;
         }
     }
