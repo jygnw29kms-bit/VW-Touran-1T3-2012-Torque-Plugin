@@ -22,6 +22,11 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.StatFs;
+import android.util.DisplayMetrics;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Arrays;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
@@ -1492,6 +1497,131 @@ public class MainActivity extends Activity {
             p.edit().putString("install_id", id).apply();
         }
         return id;
+    }
+
+    private void runRadioSystemScanAndSend() {
+        io.execute(() -> {
+            try {
+                String report = buildRadioSystemReport();
+                boolean ok = uploadReport("radio-system", report);
+                toast(ok ? "Radio-Systemscan gesendet." : "Systemscan konnte nicht gesendet werden.");
+            } catch (Exception e) {
+                appendSystemLog("RADIO_SCAN_ERROR", safe(e.getMessage()));
+                toast("Systemscan fehlgeschlagen: " + safe(e.getMessage()));
+            }
+        });
+    }
+
+    private String buildRadioSystemReport() {
+        StringBuilder r = new StringBuilder();
+        r.append("# TouranLive Radio System Report\n");
+        r.append("app_version=0.5.2\n");
+        r.append("timestamp=").append(now()).append('\n');
+        r.append("manufacturer=").append(safe(Build.MANUFACTURER)).append('\n');
+        r.append("brand=").append(safe(Build.BRAND)).append('\n');
+        r.append("model=").append(safe(Build.MODEL)).append('\n');
+        r.append("device=").append(safe(Build.DEVICE)).append('\n');
+        r.append("product=").append(safe(Build.PRODUCT)).append('\n');
+        r.append("board=").append(safe(Build.BOARD)).append('\n');
+        r.append("hardware=").append(safe(Build.HARDWARE)).append('\n');
+        r.append("bootloader=").append(safe(Build.BOOTLOADER)).append('\n');
+        r.append("android_release=").append(safe(Build.VERSION.RELEASE)).append('\n');
+        r.append("sdk=").append(Build.VERSION.SDK_INT).append('\n');
+        r.append("fingerprint=").append(safe(Build.FINGERPRINT)).append('\n');
+        r.append("abis=").append(Arrays.toString(Build.SUPPORTED_ABIS)).append('\n');
+        try { r.append("baseband=").append(safe(Build.getRadioVersion())).append('\n'); } catch (Exception ignored) {}
+
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        r.append("display_px=").append(dm.widthPixels).append('x').append(dm.heightPixels).append('\n');
+        r.append("density_dpi=").append(dm.densityDpi).append('\n');
+        r.append("density=").append(dm.density).append('\n');
+        try {
+            android.view.Display.Mode m = getWindowManager().getDefaultDisplay().getMode();
+            r.append("refresh_hz=").append(m.getRefreshRate()).append('\n');
+        } catch (Exception ignored) {}
+
+        StatFs sf = new StatFs(Environment.getDataDirectory().getAbsolutePath());
+        long total = sf.getTotalBytes(), free = sf.getAvailableBytes();
+        r.append("data_total_bytes=").append(total).append('\n');
+        r.append("data_free_bytes=").append(free).append('\n');
+
+        r.append("feature_usb_host=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_USB_HOST)).append('\n');
+        r.append("feature_bt=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH)).append('\n');
+        r.append("feature_ble=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)).append('\n');
+        r.append("feature_wifi=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_WIFI)).append('\n');
+        r.append("feature_gps=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS)).append('\n');
+        r.append("feature_touch=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)).append('\n');
+
+        r.append("\n## /proc/cpuinfo\n").append(readSmallFile("/proc/cpuinfo", 18000));
+        r.append("\n## /proc/meminfo\n").append(readSmallFile("/proc/meminfo", 12000));
+        r.append("\n## /proc/partitions\n").append(readSmallFile("/proc/partitions", 12000));
+        r.append("\n## /proc/mounts\n").append(readSmallFile("/proc/mounts", 24000));
+        r.append("\n## getprop (filtered)\n").append(runFilteredGetprop());
+        r.append("\n## headunit packages\n").append(findHeadunitPackages());
+        return r.toString();
+    }
+
+    private String readSmallFile(String path, int maxChars) {
+        StringBuilder out = new StringBuilder();
+        try (FileInputStream in = new FileInputStream(path)) {
+            byte[] b = new byte[4096]; int n;
+            while ((n = in.read(b)) > 0 && out.length() < maxChars) out.append(new String(b,0,n,StandardCharsets.UTF_8));
+        } catch (Exception e) { out.append("UNREADABLE: ").append(safe(e.getMessage())); }
+        if (out.length() > maxChars) out.setLength(maxChars);
+        return out.toString();
+    }
+
+    private String runFilteredGetprop() {
+        StringBuilder out = new StringBuilder();
+        try {
+            Process p = new ProcessBuilder("getprop").redirectErrorStream(true).start();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    String l = line.toLowerCase(Locale.ROOT);
+                    if (l.contains("serial") || l.contains("imei") || l.contains("mac") || l.contains("android_id")) continue;
+                    if (l.contains("ro.product") || l.contains("ro.build") || l.contains("ro.hardware") || l.contains("ro.boot") ||
+                        l.contains("ro.vendor") || l.contains("ro.system") || l.contains("ro.soc") || l.contains("ro.sf.lcd_density") ||
+                        l.contains("persist.sys") || l.contains("mcu") || l.contains("canbus")) out.append(line).append('\n');
+                }
+            }
+        } catch (Exception e) { out.append("getprop unavailable: ").append(safe(e.getMessage())); }
+        return out.toString();
+    }
+
+    private String findHeadunitPackages() {
+        StringBuilder out = new StringBuilder();
+        for (ApplicationInfo ai : getPackageManager().getInstalledApplications(PackageManager.GET_META_DATA)) {
+            String pkg = ai.packageName == null ? "" : ai.packageName;
+            String l = pkg.toLowerCase(Locale.ROOT);
+            if (l.contains("radio") || l.contains("mcu") || l.contains("canbus") || l.contains("zlink") || l.contains("tlink") ||
+                l.contains("carlink") || l.contains("autokit") || l.contains("bluetooth") || l.contains("launcher") || l.contains("eq") ||
+                l.contains("dsp") || l.contains("vehicle") || l.contains("factory")) {
+                CharSequence label = getPackageManager().getApplicationLabel(ai);
+                out.append(pkg).append(" | ").append(label == null ? "" : label).append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    private boolean uploadReport(String type, String body) {
+        java.net.HttpURLConnection c = null;
+        try {
+            java.net.URL u = new java.net.URL("https://www.dezender.de/touran/api/upload-log.php");
+            c = (java.net.HttpURLConnection)u.openConnection();
+            c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(10000); c.setReadTimeout(15000);
+            c.setRequestProperty("Content-Type", "text/plain; charset=utf-8");
+            c.setRequestProperty("X-Touran-Report", type);
+            c.setRequestProperty("X-Touran-Install", getPackageName());
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            c.setFixedLengthStreamingMode(bytes.length);
+            try (OutputStream os = c.getOutputStream()) { os.write(bytes); }
+            int code = c.getResponseCode();
+            appendSystemLog("SERVER_UPLOAD_" + type.toUpperCase(Locale.ROOT), "HTTP " + code);
+            return code >= 200 && code < 300;
+        } catch (Exception e) {
+            appendSystemLog("SERVER_UPLOAD_ERROR", safe(e.getMessage())); return false;
+        } finally { if (c != null) c.disconnect(); }
     }
 
     private void exportLog() {
