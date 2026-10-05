@@ -113,6 +113,8 @@ public class MainActivity extends Activity {
     private final Pid[] pids = new Pid[] {
         new Pid("0104","Motorlast","%"),
         new Pid("0105","Kühlmittel","°C"),
+        new Pid("0106","Fuel Trim kurz","%"),
+        new Pid("0107","Fuel Trim lang","%"),
         new Pid("010B","Saugrohrdruck","kPa"),
         new Pid("010C","Drehzahl","rpm"),
         new Pid("010D","Geschwindigkeit","km/h"),
@@ -120,13 +122,27 @@ public class MainActivity extends Activity {
         new Pid("010F","Ansaugluft","°C"),
         new Pid("0110","Luftmasse","g/s"),
         new Pid("0111","Drosselklappe","%"),
+        new Pid("011F","Motorlaufzeit","s"),
+        new Pid("0121","Strecke MIL","km"),
+        new Pid("0123","Kraftstoffdruck","bar"),
+        new Pid("012E","Tankentlüftung","%"),
         new Pid("012F","Tank","%"),
+        new Pid("0130","Warmlaufzyklen",""),
+        new Pid("0131","Strecke seit Fehlerlöschung","km"),
         new Pid("0133","Umgebungsdruck","kPa"),
+        new Pid("0134","Lambda Ist","λ"),
+        new Pid("013C","Kat-Temperatur","°C"),
         new Pid("0142","ECU-Spannung","V"),
+        new Pid("0143","Absolute Last","%"),
+        new Pid("0144","Lambda Soll","λ"),
+        new Pid("0145","Drossel relativ","%"),
         new Pid("0146","Außentemperatur","°C"),
+        new Pid("0147","Drossel B","%"),
         new Pid("0149","Pedalstellung","%"),
+        new Pid("014A","Pedalstellung E","%"),
         new Pid("014C","Drossel Soll","%"),
         new Pid("015C","Öltemperatur","°C"),
+        new Pid("0156","Lambda Trim lang B1","%"),
         new Pid("015E","Kraftstoffrate","L/h"),
         new Pid("0162","Drehmoment Ist","%"),
         new Pid("0163","Referenzmoment","Nm")
@@ -694,9 +710,9 @@ public class MainActivity extends Activity {
         // Priorisierte Abfrage: RPM + Speed in jedem Zyklus, dynamische Motorwerte rotierend,
         // Temperaturen/Spannung deutlich seltener. So bleiben die Instrumente fluessig,
         // ohne den ELM327 mit allen PIDs pro Runde zu blockieren.
-        final String[] dynamic = {"010B","0104","0110","0111","0149","010E"};
-        final String[] medium  = {"014C","0162","0163","015E","012F"};
-        final String[] slow    = {"0105","015C","010F","0146","0142","0133"};
+        final String[] dynamic = {"010B","0104","0110","0111","0149","010E","0123","0134","0144"};
+        final String[] medium  = {"0106","0107","0143","0145","0147","014A","014C","012E","0156","0162","0163","015E"};
+        final String[] slow    = {"0105","015C","010F","0146","0142","0133","013C","011F","0121","0130","0131","012F"};
         int cycle = 0, dyn = 0, med = 0, slw = 0;
         while (polling && socket != null && socket.isConnected()) {
             pollPid("010C"); // Drehzahl - hoechste Prioritaet
@@ -788,9 +804,24 @@ public class MainActivity extends Activity {
         try {
             int A = d.length() >= 2 ? Integer.parseInt(d.substring(0,2),16) : 0;
             int B = d.length() >= 4 ? Integer.parseInt(d.substring(2,4),16) : 0;
+            int C = d.length() >= 6 ? Integer.parseInt(d.substring(4,6),16) : 0;
+            int D = d.length() >= 8 ? Integer.parseInt(d.substring(6,8),16) : 0;
             switch (cmd) {
                 case "010C": return ((A * 256) + B) / 4.0;
                 case "010D": return (double)A;
+                case "0106":
+                case "0107":
+                case "0156": return A * 100.0 / 128.0 - 100.0;
+                case "011F":
+                case "0121":
+                case "0131": return (double)((A * 256) + B);
+                case "0123": return ((A * 256) + B) / 10.0;
+                case "012E": return A * 100.0 / 255.0;
+                case "0130": return (double)A;
+                case "0134": return ((A * 256) + B) * 2.0 / 65536.0;
+                case "013C": return ((A * 256) + B) / 10.0 - 40.0;
+                case "0143": return ((A * 256) + B) * 100.0 / 255.0;
+                case "0144": return ((A * 256) + B) * 2.0 / 65536.0;
                 case "0105":
                 case "010F":
                 case "0146":
@@ -801,7 +832,10 @@ public class MainActivity extends Activity {
                 case "0111":
                 case "0104":
                 case "012F":
+                case "0145":
+                case "0147":
                 case "0149":
+                case "014A":
                 case "014C": return A * 100.0 / 255.0;
                 case "010E": return A / 2.0 - 64.0;
                 case "0142": return ((A * 256) + B) / 1000.0;
@@ -1038,16 +1072,15 @@ public class MainActivity extends Activity {
             } else if(mfaPage==2){
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Kraftstoffrate",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Kraftstoffrate","L/h"),721,286,34,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Drehmoment Ist",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Drehmoment Ist","%"),950,286,34,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Referenzmoment","Referenzmoment","Nm"); mfaRow(c,468,"Tankfüllstand","Tank","%"); mfaRow(c,531,"Drossel Soll","Drossel Soll","%"); mfaRow(c,594,"DTC Status","__NONE__","");
-                txt(c,dtcStatus,1028,598,17,"Keine Fehler gemeldet".equals(dtcStatus)?OK:MUTED,Paint.Align.RIGHT,true);
+                txt(c,"Kraftstoffdruck",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Kraftstoffdruck","bar"),721,286,34,TEXT,Paint.Align.CENTER,true);
+                txt(c,"Lambda Ist",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Lambda Ist","λ"),950,286,34,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Lambda Soll","Lambda Soll","λ"); mfaRow(c,468,"Fuel Trim kurz","Fuel Trim kurz","%"); mfaRow(c,531,"Fuel Trim lang","Fuel Trim lang","%"); mfaRow(c,594,"Kat-Temperatur","Kat-Temperatur","°C");
             } else {
                 round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
                 round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
                 txt(c,"Zündwinkel",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Zündwinkel","°KW"),721,286,38,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Klopfrücknahme",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,"—",950,286,38,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Zylinder 1","__NONE__",""); mfaRow(c,468,"Zylinder 2","__NONE__",""); mfaRow(c,531,"Zylinder 3","__NONE__",""); mfaRow(c,594,"Zylinder 4","__NONE__","");
+                txt(c,"Absolute Last",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("Absolute Last","%"),950,286,38,TEXT,Paint.Align.CENTER,true);
+                mfaRow(c,405,"Tankentlüftung","Tankentlüftung","%"); mfaRow(c,468,"Drossel relativ","Drossel relativ","%"); mfaRow(c,531,"Drossel B","Drossel B","%"); mfaRow(c,594,"Pedal E","Pedalstellung E","%");
             }
             for(int i=0;i<4;i++){ p.setStyle(Paint.Style.FILL); p.setColor(i==mfaPage?RED:Color.rgb(70,76,82)); c.drawCircle(X(790+i*31),Y(669),S(i==mfaPage?8:7),p); }
 
