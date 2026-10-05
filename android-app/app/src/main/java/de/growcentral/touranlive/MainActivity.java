@@ -10,6 +10,8 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
+import android.graphics.BitmapFactory;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -33,11 +35,15 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.net.URL;
+import java.net.HttpURLConnection;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,6 +62,7 @@ public class MainActivity extends Activity {
     private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     private static final int REQ_BT = 10;
     private static final int REQ_EXPORT_LOG = 20;
+    private static final String LOG_UPLOAD_URL = "https://www.dezender.de/touran/api/upload-log.php";
 
     private static final int BG = Color.rgb(5, 7, 10);
     private static final int PANEL = Color.rgb(17, 20, 24);
@@ -264,6 +271,8 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setPadding(0, dp(18), 0, 0);
         row.addView(actionButton("LOG AUF USB", v -> exportLog()), weight());
+        row.addView(actionButton("LOG AN SERVER", v -> uploadCurrentLog(false)), weight());
+        row.addView(actionButton("ADAPTER SCAN + SEND", v -> runCapabilityScanAndUpload()), weight());
         row.addView(actionButton("LOG LEEREN", v -> {
             resetLog();
             showLogger();
@@ -1089,6 +1098,7 @@ public class MainActivity extends Activity {
     private class DashboardView extends View {
         private static final float BW = 1664f, BH = 936f;
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Bitmap masterCar;
         private final Map<String, Double> displayValues = new LinkedHashMap<>();
         private float sx=1f, sy=1f;
         private boolean animatorRunning = false;
@@ -1119,6 +1129,7 @@ public class MainActivity extends Activity {
 
         DashboardView() {
             super(MainActivity.this);
+            masterCar = BitmapFactory.decodeResource(getResources(), de.growcentral.touranlive.R.drawable.touran_live_icon);
             setBackgroundColor(Color.rgb(3,5,7));
             setFocusable(true);
         }
@@ -1211,6 +1222,14 @@ public class MainActivity extends Activity {
             txt(c,val(key,unit),1028,y+4,21,TEXT,Paint.Align.RIGHT,true);
         }
 
+        private void drawMasterCar(Canvas c){
+            if (masterCar == null) return;
+            RectF dst = new RectF(X(590),Y(430),X(1074),Y(704));
+            p.setAlpha(245);
+            c.drawBitmap(masterCar, null, dst, p);
+            p.setAlpha(255);
+        }
+
         private void nav(Canvas c,float l,float r,String label,boolean active){
             round(c,active?Color.rgb(25,9,11):Color.rgb(9,12,15),l,812,r,916,10);
             strokeRound(c,active?RED:Color.rgb(42,47,53),l,812,r,916,10,active?2.5f:1.5f);
@@ -1235,7 +1254,7 @@ public class MainActivity extends Activity {
             miniGauge(c,1236,592,96,"Bordspannung",vagMode?"VAG_Voltage":"ECU-Spannung","V",10,16);
             miniGauge(c,1484,592,96,"Außentemperatur","Außentemperatur","°C",-20,40);
 
-            round(c,Color.rgb(8,11,14),582,76,1082,699,16); strokeRound(c,Color.rgb(38,43,48),582,76,1082,699,16,2);
+            round(c,Color.rgb(8,11,14),582,76,1082,446,16); strokeRound(c,Color.rgb(38,43,48),582,76,1082,446,16,2);
             String[] pageNames={"Fahrt | VAG","Temperaturen","Gemisch / Kraftstoff","Zuendung / Zylinder"};
             txt(c,"‹",622,140,42,TEXT,Paint.Align.CENTER,true);
             txt(c,(mfaPage+1)+"/4",762,137,24,Color.rgb(195,199,204),Paint.Align.CENTER,false);
@@ -1244,31 +1263,27 @@ public class MainActivity extends Activity {
             line(c,RED,3,605,156,1058,156);
 
             if(mfaPage==0){
-                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
-                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Ladedruck Ist | VAG 115.4",622,207,18,MUTED,Paint.Align.LEFT,false); txt(c,val("VAG_BoostActualAbs","mbar abs"),721,276,30,TEXT,Paint.Align.CENTER,true);
-                txt(c,"rel. zu Umgebung",628,350,17,MUTED,Paint.Align.LEFT,false); txt(c,val("VAG_BoostActualRel","bar"),780,350,18,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Ladedruck Soll | VAG 115.3",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_BoostTargetAbs","mbar"),950,286,30,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Luftmasse | VAG 210.3","VAG_MAF","g/s"); mfaRow(c,468,"Motorlast | VAG 115.2","Motorlast","%"); mfaRow(c,531,"Raildruck Ist | VAG 106.1","VAG_Rail","bar"); mfaRow(c,594,"Zuendwinkel | VAG 003.4","VAG_Ignition","deg");
+                mfaRow(c,205,"Ladedruck Ist","Ladedruck Ist rel.","bar");
+                mfaRow(c,258,"Ladedruck Soll","Ladedruck Soll rel.","bar");
+                mfaRow(c,311,"Motorlast","Motorlast","%");
+                mfaRow(c,364,"Raildruck","Raildruck Ist","bar");
             } else if(mfaPage==1){
-                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
-                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Oeltemperatur | VAG 134.1",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_OilTemp","C"),721,286,38,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Kuehlmittel | VAG 004.3",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_Coolant","C"),950,286,38,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Ansaugluft | VAG 004.4","VAG_IntakeTemp","C"); mfaRow(c,468,"Luftmasse | VAG 210.3","VAG_MAF","g/s"); mfaRow(c,531,"Bordspannung | VAG 004.2","VAG_Voltage","V"); mfaRow(c,594,"Umgebungsdruck | VAG 113.4","VAG_AmbientPressure","mbar");
+                mfaRow(c,205,"?ltemperatur","?ltemperatur","?C");
+                mfaRow(c,258,"K?hlmittel","K?hlmittel","?C");
+                mfaRow(c,311,"Ansaugluft","Ansaugluft","?C");
+                mfaRow(c,364,"Bordspannung","Steuerger?tspannung","V");
             } else if(mfaPage==2){
-                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
-                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Raildruck Ist | VAG 106.1",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_Rail","bar"),721,286,34,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Lambda Ist | VAG 031.1",950,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_LambdaActual","lambda"),950,286,34,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Lambda Soll | VAG 031.2","VAG_LambdaTarget","lambda"); mfaRow(c,468,"Adapt. Leerlauf | VAG 032.1","VAG_AdaptIdle","%"); mfaRow(c,531,"Adapt. Teillast | VAG 032.2","VAG_AdaptPart","%"); mfaRow(c,594,"Luftmasse | VAG 210.3","VAG_MAF","g/s");
+                mfaRow(c,205,"Lambda Ist","Lambda Ist","?");
+                mfaRow(c,258,"Lambda Soll","Lambda Soll","?");
+                mfaRow(c,311,"Adapt. Leerlauf","Lambda Adapt. Leerlauf","%");
+                mfaRow(c,364,"Adapt. Teillast","Lambda Adapt. Teillast","%");
             } else {
-                round(c,Color.rgb(12,15,18),608,171,834,368,8); strokeRound(c,Color.rgb(45,50,56),608,171,834,368,8,1.5f);
-                round(c,Color.rgb(12,15,18),846,171,1055,368,8); strokeRound(c,Color.rgb(45,50,56),846,171,1055,368,8,1.5f);
-                txt(c,"Klopfruecknahme Zyl. 1",721,207,18,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_Knock1","deg"),721,286,34,TEXT,Paint.Align.CENTER,true);
-                txt(c,"Nockenwelle Ist | VAG 091.4",950,207,17,MUTED,Paint.Align.CENTER,false); txt(c,val("VAG_CamActual","deg"),950,286,34,TEXT,Paint.Align.CENTER,true);
-                mfaRow(c,405,"Klopfen Zyl. 2 | VAG 020.2","VAG_Knock2","deg"); mfaRow(c,468,"Klopfen Zyl. 3 | VAG 020.3","VAG_Knock3","deg"); mfaRow(c,531,"Klopfen Zyl. 4 | VAG 020.4","VAG_Knock4","deg"); mfaRow(c,594,"Misfire Zyl. 1 | VAG 015.1","VAG_Misfire1","count");
+                mfaRow(c,205,"Luftmasse","Luftmasse","g/s");
+                mfaRow(c,258,"Z?ndwinkel","Z?ndwinkel","?KW");
+                mfaRow(c,311,"NW Soll","Nockenwelle Soll","?KW");
+                mfaRow(c,364,"NW Ist","Nockenwelle Ist","?KW");
             }
+            drawMasterCar(c);
             for(int i=0;i<4;i++){ p.setStyle(Paint.Style.FILL); p.setColor(i==mfaPage?RED:Color.rgb(70,76,82)); c.drawCircle(X(790+i*31),Y(669),S(i==mfaPage?8:7),p); }
 
             fill(c,Color.rgb(5,8,10),0,706,1664,798); line(c,Color.rgb(52,57,62),1.5f,0,706,1664,706);
@@ -1369,6 +1384,114 @@ public class MainActivity extends Activity {
     private String newLogFileName() {
         return "135er_Touran_" +
                 new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.GERMANY).format(new Date()) + ".csv";
+    }
+
+    private void runCapabilityScanAndUpload() {
+        if (socket == null || !socket.isConnected()) {
+            toast("Zuerst OBD/VAG verbinden.");
+            return;
+        }
+        toast("Adapter- und Daten-Scan l?uft ?");
+        polling = false;
+        io.execute(() -> {
+            try {
+                appendSystemLog("CAPABILITY_SCAN_BEGIN", "TouranLive read-only adapter scan");
+                if (vagMode && vag != null && vag.isOpen()) {
+                    int[] groups = {1,2,3,4,5,6,15,16,20,31,32,90,91,93,106,111,113,114,115,117,118,119,120,122,130,131,132,134,140,141,201,204,210,211,227,229};
+                    for (int group : groups) {
+                        try {
+                            VagTp20.Block b = vag.readBlock(group);
+                            appendSystemLog("CAP_VAG_" + group, b == null ? "NO_DATA" : b.raw);
+                            if (b != null) applyVagBlock(b);
+                        } catch (Exception e) {
+                            appendSystemLog("CAP_VAG_" + group, "ERROR:" + safe(e.getMessage()));
+                        }
+                    }
+                    appendSystemLog("CAPABILITY_SCAN_MODE", "VAG TP2.0/KWP2000");
+                } else {
+                    String[] adapter = {"ATI","AT@1","AT@2","ATDP","ATDPN","ATRV","0100","0120","0140","0160","0180","0900","0920"};
+                    for (String cmd : adapter) {
+                        try { appendSystemLog("CAP_" + cmd, send(cmd)); }
+                        catch (Exception e) { appendSystemLog("CAP_" + cmd, "ERROR:" + safe(e.getMessage())); }
+                    }
+                    discoverSupportedPids();
+                    appendSystemLog("CAPABILITY_SCAN_MODE", "Standard OBD/ELM327");
+                }
+                appendSystemLog("CAPABILITY_SCAN_END", "read-only");
+                uploadCurrentLogInternal(true);
+            } catch (Exception e) {
+                appendSystemLog("CAPABILITY_SCAN_ERROR", safe(e.getMessage()));
+                toast("Scan fehlgeschlagen: " + safe(e.getMessage()));
+            } finally {
+                if (socket != null && socket.isConnected()) {
+                    polling = true;
+                    if (vagMode && vag != null && vag.isOpen()) pollVagLoop();
+                    else pollLoop();
+                }
+            }
+        });
+    }
+
+    private void uploadCurrentLog(boolean capabilityReport) {
+        io.execute(() -> uploadCurrentLogInternal(capabilityReport));
+    }
+
+    private void uploadCurrentLogInternal(boolean capabilityReport) {
+        HttpURLConnection con = null;
+        try {
+            String snapshot;
+            synchronized (logLock) { snapshot = csvLog.toString(); }
+            String installId = getInstallId();
+            StringBuilder report = new StringBuilder();
+            report.append("TouranLive\n");
+            report.append("report_type=").append(capabilityReport ? "capability" : "log").append('\n');
+            report.append("install_id=").append(installId).append('\n');
+            report.append("vehicle=VW Touran 1T3 2012 CAVC MED17.5.5\n");
+            report.append("protocol=").append(protocolName).append('\n');
+            report.append("vag_mode=").append(vagMode).append('\n');
+            report.append("generated=").append(now()).append('\n');
+            report.append("--- CSV LOG ---\n").append(snapshot);
+
+            URL url = new URL(LOG_UPLOAD_URL);
+            con = (HttpURLConnection) url.openConnection();
+            con.setConnectTimeout(8000);
+            con.setReadTimeout(12000);
+            con.setRequestMethod("POST");
+            con.setDoOutput(true);
+            con.setRequestProperty("Content-Type", "text/plain; charset=utf-8");
+            con.setRequestProperty("X-Touran-Install", installId);
+            con.setRequestProperty("X-Touran-Report", capabilityReport ? "capability" : "log");
+            byte[] bytes = report.toString().getBytes(StandardCharsets.UTF_8);
+            con.setFixedLengthStreamingMode(bytes.length);
+            try (OutputStream out = con.getOutputStream()) { out.write(bytes); out.flush(); }
+            int code = con.getResponseCode();
+            InputStream in = code >= 200 && code < 300 ? con.getInputStream() : con.getErrorStream();
+            String response = "";
+            if (in != null) {
+                byte[] data = new byte[4096]; int n; StringBuilder sb = new StringBuilder();
+                while ((n = in.read(data)) > 0) sb.append(new String(data,0,n,StandardCharsets.UTF_8));
+                response = sb.toString();
+                in.close();
+            }
+            appendSystemLog("SERVER_UPLOAD", "HTTP " + code + " " + response);
+            if (code >= 200 && code < 300) toast(capabilityReport ? "Adapter-Scan an dezender.de gesendet." : "Log an dezender.de gesendet.");
+            else toast("Server-Upload fehlgeschlagen: HTTP " + code);
+        } catch (Exception e) {
+            appendSystemLog("SERVER_UPLOAD_ERROR", safe(e.getMessage()));
+            toast("Server-Upload fehlgeschlagen: " + safe(e.getMessage()));
+        } finally {
+            if (con != null) con.disconnect();
+        }
+    }
+
+    private String getInstallId() {
+        android.content.SharedPreferences p = getSharedPreferences("touranlive", MODE_PRIVATE);
+        String id = p.getString("install_id", null);
+        if (id == null || id.length() < 8) {
+            id = UUID.randomUUID().toString();
+            p.edit().putString("install_id", id).apply();
+        }
+        return id;
     }
 
     private void exportLog() {
