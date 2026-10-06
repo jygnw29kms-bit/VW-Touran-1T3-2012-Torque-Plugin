@@ -217,7 +217,7 @@ public class MainActivity extends Activity {
         hero.setPadding(dp(12), dp(8), dp(12), dp(8));
 
         ImageView car = new ImageView(this);
-        car.setImageResource(de.growcentral.touranlive.R.drawable.touran_live_icon);
+        car.setImageResource(de.growcentral.touranlive.R.drawable.touran_master_final);
         car.setAdjustViewBounds(true);
         car.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         hero.addView(car, new LinearLayout.LayoutParams(0, dp(210), 0.42f));
@@ -897,7 +897,7 @@ public class MainActivity extends Activity {
 
     private int fastLogDivider = 0;
     private void pollFastPid(String cmd) {
-        if (!polling || !Boolean.TRUE.equals(support.get(cmd))) return;
+        if (!polling) return;
         Pid target = null;
         for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
         if (target == null) return;
@@ -914,7 +914,7 @@ public class MainActivity extends Activity {
     }
 
     private void pollPid(String cmd) {
-        if (!polling || !Boolean.TRUE.equals(support.get(cmd))) return;
+        if (!polling) return;
         Pid target = null;
         for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
         if (target == null) return;
@@ -1101,7 +1101,7 @@ public class MainActivity extends Activity {
 
 
     private class DashboardView extends View {
-        private static final float BW = 1664f, BH = 936f;
+        private static final float BW = 1024f, BH = 600f;
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Bitmap masterCar;
         private final Map<String, Double> displayValues = new LinkedHashMap<>();
@@ -1134,7 +1134,7 @@ public class MainActivity extends Activity {
 
         DashboardView() {
             super(MainActivity.this);
-            masterCar = BitmapFactory.decodeResource(getResources(), de.growcentral.touranlive.R.drawable.touran_live_icon);
+            masterCar = BitmapFactory.decodeResource(getResources(), de.growcentral.touranlive.R.drawable.touran_master_final);
             setBackgroundColor(Color.rgb(3,5,7));
             setFocusable(true);
         }
@@ -1243,83 +1243,57 @@ public class MainActivity extends Activity {
 
         @Override protected void onDraw(Canvas c){
             super.onDraw(c); sx=getWidth()/BW; sy=getHeight()/BH;
-            fill(c,Color.rgb(3,5,7),0,0,BW,BH);
-            fill(c,Color.rgb(7,9,11),0,0,BW,70);
-            line(c,RED,2,330,69,1340,69);
-            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(S(3));p.setColor(TEXT);c.drawCircle(X(50),Y(35),S(20),p);
-            txt(c,"VW",50,42,16,TEXT,Paint.Align.CENTER,true);
-            txt(c,"TouranLive",94,44,26,TEXT,Paint.Align.LEFT,true);
-            txt(c,"Fahrzeugansicht (MFA) – Seite "+(mfaPage+1)+"/4",832,42,24,Color.rgb(190,195,201),Paint.Align.CENTER,false);
-            txt(c,"VW Touran 1T3 | CAVC MED17.5.5 | VCDS + VAG TP2.0/KWP2000",1600,42,17,Color.rgb(180,185,191),Paint.Align.RIGHT,false);
-
-            gauge(c,300,344,270,8000,"Drehzahl",true);
-            gauge(c,1365,344,270,240,"Geschwindigkeit",false);
-            miniGauge(c,178,592,96,"Kühlmittel","Kühlmittel","°C",50,130);
-            miniGauge(c,425,592,96,"Oeltemp | VAG 134.1","VAG_OilTemp","C",50,150);
-            miniGauge(c,1236,592,96,"Bordspannung",vagMode?"VAG_Voltage":"ECU-Spannung","V",10,16);
-            miniGauge(c,1484,592,96,"Außentemperatur","Außentemperatur","°C",-20,40);
-
-            round(c,Color.rgb(8,11,14),582,76,1082,446,16); strokeRound(c,Color.rgb(38,43,48),582,76,1082,446,16,2);
-            String[] pageNames={"Fahrt | VAG","Temperaturen","Gemisch / Kraftstoff","Zuendung / Zylinder"};
-            txt(c,"‹",622,140,42,TEXT,Paint.Align.CENTER,true);
-            txt(c,(mfaPage+1)+"/4",762,137,24,Color.rgb(195,199,204),Paint.Align.CENTER,false);
-            txt(c,pageNames[mfaPage],837,137,28,TEXT,Paint.Align.CENTER,true);
-            txt(c,"›",1040,140,42,TEXT,Paint.Align.CENTER,true);
-            line(c,RED,3,605,156,1058,156);
-
+            fill(c,Color.rgb(2,4,7),0,0,1024,600);
+            fill(c,Color.rgb(5,8,11),0,0,1024,50); line(c,RED,2,195,49,815,49);
+            txt(c,"VW",35,31,16,TEXT,Paint.Align.CENTER,true); txt(c,"Touran 1T3",66,22,22,TEXT,Paint.Align.LEFT,true);
+            txt(c,"2012 | 1.4 TSI | CAVC",66,42,13,MUTED,Paint.Align.LEFT,false);
+            txt(c,"Fahrt",315,31,18,TEXT,Paint.Align.CENTER,true); txt(c,"Motor",420,31,16,MUTED,Paint.Align.CENTER,false);
+            txt(c,"Ladedruck",520,31,16,MUTED,Paint.Align.CENTER,false); txt(c,"Kraftstoff",630,31,16,MUTED,Paint.Align.CENTER,false);
+            txt(c,(mfaPage+1)+"/4",735,31,17,TEXT,Paint.Align.CENTER,true);
+            txt(c,polling?(vagMode?"VAG verbunden":"OBD verbunden"):"getrennt",865,22,14,polling?OK:RED,Paint.Align.RIGHT,true);
+            txt(c,polling?protocolName:"-",865,40,11,MUTED,Paint.Align.RIGHT,false);
+            txt(c,new SimpleDateFormat("HH:mm",Locale.GERMANY).format(new Date()),1000,23,18,TEXT,Paint.Align.RIGHT,true);
+            txt(c,new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date()),1000,41,11,MUTED,Paint.Align.RIGHT,false);
+            gauge(c,160,195,145,8000,"Drehzahl",true); gauge(c,864,195,145,240,"Geschwindigkeit",false);
+            miniGauge(c,80,365,62,"K\u00fchlmittel",vagMode?"VAG_Coolant":"K\u00fchlmittel","\u00b0C",50,130);
+            miniGauge(c,245,365,62,"\u00d6ltemperatur",vagMode?"VAG_OilTemp":"__NA__","\u00b0C",50,150);
+            miniGauge(c,779,365,62,"Bordspannung",vagMode?"VAG_Voltage":"ECU-Spannung","V",10,16);
+            miniGauge(c,944,365,62,"Au\u00dfentemperatur","Au\u00dfentemperatur","\u00b0C",-20,50);
+            round(c,Color.rgb(7,10,14),326,60,698,270,10); strokeRound(c,Color.rgb(45,50,56),326,60,698,270,10,1.5f);
+            txt(c,"<",347,92,26,TEXT,Paint.Align.CENTER,true); txt(c,(mfaPage+1)+"/4",512,90,18,TEXT,Paint.Align.CENTER,true); txt(c,">",676,92,26,TEXT,Paint.Align.CENTER,true); line(c,RED,2,340,102,684,102);
+            String boostActual=vagMode?"VAG_BoostActualRel":"Saugrohrdruck rel.";
+            String boostTarget=vagMode?"VAG_BoostTargetRel":"__NA__";
+            String rail=vagMode?"VAG_Rail":"Kraftstoffdruck";
+            String lambdaActual=vagMode?"VAG_LambdaActual":"Lambda Ist";
+            String lambdaTarget=vagMode?"VAG_LambdaTarget":"Lambda Soll";
+            String trimShort=vagMode?"VAG_AdaptIdle":"Fuel Trim kurz";
+            String trimLong=vagMode?"VAG_AdaptPart":"Fuel Trim lang";
             if(mfaPage==0){
-                mfaRow(c,205,"Ladedruck Ist","Ladedruck Ist rel.","bar");
-                mfaRow(c,258,"Ladedruck Soll","Ladedruck Soll rel.","bar");
-                mfaRow(c,311,"Motorlast","Motorlast","%");
-                mfaRow(c,364,"Raildruck","Raildruck Ist","bar");
+                masterRow(c,126,"Ladedruck Ist",boostActual,"bar"); masterRow(c,158,"Ladedruck Soll",boostTarget,"bar"); masterRow(c,190,"Motorlast","Motorlast","%"); masterRow(c,222,"Raildruck",rail,"bar"); masterRow(c,254,"Lambda Ist",lambdaActual,"lambda");
             } else if(mfaPage==1){
-                mfaRow(c,205,"?ltemperatur","?ltemperatur","?C");
-                mfaRow(c,258,"K?hlmittel","K?hlmittel","?C");
-                mfaRow(c,311,"Ansaugluft","Ansaugluft","?C");
-                mfaRow(c,364,"Bordspannung","Steuerger?tspannung","V");
+                masterRow(c,126,"\u00d6ltemperatur",vagMode?"VAG_OilTemp":"__NA__","\u00b0C"); masterRow(c,158,"K\u00fchlmittel",vagMode?"VAG_Coolant":"K\u00fchlmittel","\u00b0C"); masterRow(c,190,"Ansaugluft",vagMode?"VAG_IntakeTemp":"Ansaugluft","\u00b0C"); masterRow(c,222,"Bordspannung",vagMode?"VAG_Voltage":"ECU-Spannung","V"); masterRow(c,254,"Au\u00dfentemperatur","Au\u00dfentemperatur","\u00b0C");
             } else if(mfaPage==2){
-                mfaRow(c,205,"Lambda Ist","Lambda Ist","?");
-                mfaRow(c,258,"Lambda Soll","Lambda Soll","?");
-                mfaRow(c,311,"Adapt. Leerlauf","Lambda Adapt. Leerlauf","%");
-                mfaRow(c,364,"Adapt. Teillast","Lambda Adapt. Teillast","%");
+                masterRow(c,126,"Lambda Ist",lambdaActual,"lambda"); masterRow(c,158,"Lambda Soll",lambdaTarget,"lambda"); masterRow(c,190,"STFT / Adapt. kurz",trimShort,"%"); masterRow(c,222,"LTFT / Adapt. lang",trimLong,"%"); masterRow(c,254,"Kat-Temperatur","Kat-Temperatur","\u00b0C");
             } else {
-                mfaRow(c,205,"Luftmasse","Luftmasse","g/s");
-                mfaRow(c,258,"Z?ndwinkel","Z?ndwinkel","?KW");
-                mfaRow(c,311,"NW Soll","Nockenwelle Soll","?KW");
-                mfaRow(c,364,"NW Ist","Nockenwelle Ist","?KW");
+                masterRow(c,126,"Z\u00fcndwinkel",vagMode?"VAG_Ignition":"Z\u00fcndwinkel","\u00b0KW"); masterRow(c,158,"Nockenwelle Soll",vagMode?"VAG_CamTarget":"__NA__","\u00b0KW"); masterRow(c,190,"Nockenwelle Ist",vagMode?"VAG_CamActual":"__NA__","\u00b0KW"); masterRow(c,222,"Luftmasse",vagMode?"VAG_MAF":"__NA__","g/s"); masterRow(c,254,"Drosselklappe","Drosselklappe","%");
             }
-            drawMasterCar(c);
-            for(int i=0;i<4;i++){ p.setStyle(Paint.Style.FILL); p.setColor(i==mfaPage?RED:Color.rgb(70,76,82)); c.drawCircle(X(790+i*31),Y(669),S(i==mfaPage?8:7),p); }
-
-            fill(c,Color.rgb(5,8,10),0,706,1664,798); line(c,Color.rgb(52,57,62),1.5f,0,706,1664,706);
-            txt(c,polling?(vagMode?"VAG verbunden":"OBD verbunden"):"OBD getrennt",148,751,21,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"—",148,779,15,MUTED,Paint.Align.LEFT,false);
-            txt(c,"●",521,760,35,RED,Paint.Align.CENTER,true); txt(c,"Logger "+(polling?"aktiv":"bereit"),565,750,21,TEXT,Paint.Align.LEFT,true); txt(c,logRows+" Logzeilen",565,777,15,MUTED,Paint.Align.LEFT,false);
-            int dc="Keine Fehler gemeldet".equals(dtcStatus)?OK:("nicht geprüft".equals(dtcStatus)?MUTED:RED); txt(c,"DTC",1128,746,18,dc,Paint.Align.LEFT,true); txt(c,dtcStatus,1128,776,16,dc,Paint.Align.LEFT,false);
-            txt(c,new SimpleDateFormat("HH:mm",Locale.GERMANY).format(new Date()),1609,746,20,TEXT,Paint.Align.RIGHT,true); txt(c,new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date()),1609,775,15,MUTED,Paint.Align.RIGHT,false);
-
-            nav(c,25,347,"Tacho",true); nav(c,352,664,"Live",false); nav(c,669,981,"Diagnose",false); nav(c,986,1298,"Logger",false); nav(c,1303,1477,"Apps",false); nav(c,1482,1639,"VCDS",false);
+            round(c,Color.rgb(5,7,10),305,278,719,463,8);
+            if(masterCar!=null){ RectF dst=new RectF(X(330),Y(286),X(694),Y(455)); p.setAlpha(255); c.drawBitmap(masterCar,null,dst,p); }
+            txt(c,"VW Touran 1T3",32,447,17,TEXT,Paint.Align.LEFT,true); txt(c,"CAVC | B-JU 6969",32,466,12,MUTED,Paint.Align.LEFT,false);
+            fill(c,Color.rgb(5,8,10),0,470,1024,523); line(c,Color.rgb(48,53,59),1,0,470,1024,470);
+            txt(c,polling?(vagMode?"VAG verbunden":"OBD verbunden"):"OBD getrennt",34,494,15,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"-",34,513,11,MUTED,Paint.Align.LEFT,false);
+            txt(c,"OBD Fallback",270,494,14,TEXT,Paint.Align.LEFT,true); txt(c,vagMode?"bereit":"aktiv",270,513,11,vagMode?MUTED:OK,Paint.Align.LEFT,false);
+            txt(c,"Logger",500,494,14,TEXT,Paint.Align.LEFT,true); txt(c,logRows+" Zeilen",500,513,11,MUTED,Paint.Align.LEFT,false);
+            int dc="Keine Fehler gemeldet".equals(dtcStatus)?OK:MUTED; txt(c,"DTC",735,494,14,TEXT,Paint.Align.LEFT,true); txt(c,dtcStatus,735,513,11,dc,Paint.Align.LEFT,false);
+            masterNav(c,0,170,"Tacho",true); masterNav(c,171,340,"Fahrzeug",false); masterNav(c,341,510,"Live",false); masterNav(c,511,680,"Logger",false); masterNav(c,681,850,"Apps",false); masterNav(c,851,1024,"Einstellungen",false);
         }
-
+        private void masterRow(Canvas c,float y,String label,String key,String unit){ line(c,Color.rgb(40,45,51),1,340,y+14,684,y+14); txt(c,label,346,y,13,MUTED,Paint.Align.LEFT,false); txt(c,val(key,unit),678,y,15,TEXT,Paint.Align.RIGHT,true); }
+        private void masterNav(Canvas c,float l,float r,String label,boolean active){ round(c,active?Color.rgb(28,7,9):Color.rgb(7,10,13),l+4,527,r-4,596,7); strokeRound(c,active?RED:Color.rgb(42,47,53),l+4,527,r-4,596,7,active?2:1); txt(c,label,(l+r)/2,568,17,active?TEXT:Color.rgb(205,209,214),Paint.Align.CENTER,true); }
         @Override public boolean onTouchEvent(android.view.MotionEvent e){
-            float x=e.getX()/sx,y=e.getY()/sy;
-            if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){ touchDownX=x; return true; }
-            if(e.getAction()!=android.view.MotionEvent.ACTION_UP) return true;
-            if(y>=812){
-                if(x<347){ invalidate(); return true; }
-                if(x<664){ buildShell(); showHome(); return true; }
-                if(x<981){ buildShell(); showDiagnostics(); return true; }
-                if(x<1298){ buildShell(); showLogger(); return true; }
-                if(x<1477){ buildShell(); showApps(); return true; }
-                buildShell(); showVcds(); return true;
-            }
-            if(y>=706 && y<798 && x<430){ if(polling) disconnect(); else connect(); return true; }
-            if(y>=76 && y<=699 && x>=582 && x<=1082){
-                float dx=x-touchDownX;
-                if(Math.abs(dx)>70){ mfaPage=(mfaPage+(dx<0?1:3))%4; invalidate(); return true; }
-                if(y<180 && x<700){ mfaPage=(mfaPage+3)%4; invalidate(); return true; }
-                if(y<180 && x>970){ mfaPage=(mfaPage+1)%4; invalidate(); return true; }
-            }
-            return true;
+            float x=e.getX()/sx,y=e.getY()/sy; if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){touchDownX=x;return true;} if(e.getAction()!=android.view.MotionEvent.ACTION_UP)return true;
+            if(y>=527){ if(x<170){invalidate();return true;} if(x<340){buildShell();showVehicle();return true;} if(x<510){buildShell();showHome();return true;} if(x<680){buildShell();showLogger();return true;} if(x<850){buildShell();showApps();return true;} openSettings();return true; }
+            if(y>=60&&y<=270&&x>=326&&x<=698){ float dx=x-touchDownX; if(Math.abs(dx)>45){mfaPage=(mfaPage+(dx<0?1:3))%4;invalidate();return true;} if(y<110&&x<390){mfaPage=(mfaPage+3)%4;invalidate();return true;} if(y<110&&x>635){mfaPage=(mfaPage+1)%4;invalidate();return true;} }
+            if(y>=470&&y<523&&x<220){if(polling)disconnect();else connect();return true;} return true;
         }
     }
 
