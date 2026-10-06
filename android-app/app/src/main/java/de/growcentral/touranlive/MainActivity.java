@@ -311,6 +311,7 @@ public class MainActivity extends Activity {
         TextView t = title("MOTOR-DIAGNOSE • CAVC");
         head.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
         head.addView(actionButton("FEHLER LESEN", v -> readDiagnostics()), weight());
+        head.addView(actionButton("FAHRZEUG / PR", v -> showVehicleProfile()), weight());
         content.addView(head);
 
         TextView info = body("Liest gespeicherte, schwebende und permanente OBD-Fehler aus dem Motorsteuergerät. Es werden keine Fehler gelöscht und keine Steuergerätewerte verändert.");
@@ -333,6 +334,26 @@ public class MainActivity extends Activity {
 
         sv.addView(list);
         content.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
+    }
+
+    private void showVehicleProfile() {
+        content.removeAllViews();
+        content.addView(title("FAHRZEUGPROFIL • PR-AUSSTATTUNG"));
+        TextView base = body(VehicleProfile.MODEL + " • Modelljahr " + VehicleProfile.MODEL_YEAR + " • Produktion " + VehicleProfile.PRODUCTION_DATE +
+                "\n" + VehicleProfile.ENGINE_TEXT + " • Getriebe " + VehicleProfile.GEARBOX + " • " + VehicleProfile.DRIVE +
+                "\nVerkaufstyp " + VehicleProfile.SALES_TYPE + " • Lack " + VehicleProfile.COLOR + " • " + VehicleProfile.TRIM);
+        base.setPadding(0, dp(6), 0, dp(12));
+        content.addView(base);
+        ScrollView sv = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        TextView hp = body("VORHANDEN / APP-RELEVANT"); hp.setTextColor(OK); hp.setTypeface(Typeface.DEFAULT_BOLD); list.addView(hp);
+        for (String x : VehicleProfile.PRESENT_PR) { TextView v=body("✓  " + x); v.setPadding(dp(8),dp(4),0,dp(4)); list.addView(v); }
+        TextView ha = body("\nAB WERK NICHT VORHANDEN"); ha.setTextColor(MUTED); ha.setTypeface(Typeface.DEFAULT_BOLD); list.addView(ha);
+        for (String x : VehicleProfile.ABSENT_PR) { TextView v=body("—  " + x); v.setTextColor(MUTED); v.setPadding(dp(8),dp(4),0,dp(4)); list.addView(v); }
+        TextView note = body("\nDie PR-Liste beschreibt die Werksausstattung. Live-Werte werden nur angezeigt, wenn VCDS/VAG oder ein bestätigter OBD-PID tatsächlich Daten liefert.");
+        note.setTextColor(MUTED); note.setPadding(0,dp(8),0,dp(16)); list.addView(note);
+        sv.addView(list); content.addView(sv, new LinearLayout.LayoutParams(-1,0,1));
     }
 
     private void addDtcSection(LinearLayout list, String title, List<String> items) {
@@ -682,6 +703,9 @@ public class MainActivity extends Activity {
         r.append(pairedObd ? "OK" : "WARNUNG").append("  gekoppelter OBD/ELM327 gefunden\n");
         r.append(net ? "OK" : "FEHLER").append("  Internet validiert\n");
         r.append(storage ? "OK" : "FEHLER").append("  App-Speicher beschreibbar\n");
+        r.append("INFO  Fahrzeugprofil: ").append(VehicleProfile.MODEL).append(" / ").append(VehicleProfile.ENGINE).append(" / ").append(VehicleProfile.GEARBOX).append("\n");
+        r.append("INFO  9Q5 MFA+, 7X5 Parklenkassistent, 9AK Climatronic, 8T2 GRA vorhanden\n");
+        r.append("INFO  7K0 kein RDK, 7L3 kein Start/Stopp, 7Q0 kein Werks-Navi, 9W0 kein Werks-Telefon\n");
         r.append("SERVER  ").append(server).append('\n');
         r.append("Speicher-Hinweis: Für App-internen Speicher und Android-Dateiauswahl ist kein altes WRITE_EXTERNAL_STORAGE-Recht nötig.");
         appendSystemLog("SELF_CHECK", r.toString().replace('\n','|'));
@@ -899,18 +923,42 @@ public class MainActivity extends Activity {
         }
     }
 
+    private final Map<Integer, Integer> vagGroupFailures = new HashMap<>();
+    private final Map<Integer, Long> vagGroupBackoffUntil = new HashMap<>();
+
+    private VagTp20.Block readVagGroupSafe(int group, boolean core) throws Exception {
+        long now = SystemClock.elapsedRealtime();
+        Long until = vagGroupBackoffUntil.get(group);
+        if (!core && until != null && until > now) return null;
+        try {
+            VagTp20.Block b = vag.readBlock(group);
+            vagGroupFailures.put(group, 0);
+            vagGroupBackoffUntil.remove(group);
+            return b;
+        } catch (Exception e) {
+            int fails = vagGroupFailures.containsKey(group) ? vagGroupFailures.get(group) + 1 : 1;
+            vagGroupFailures.put(group, fails);
+            appendSystemLog("VAG_GROUP_" + group + "_ERROR", safe(e.getMessage()));
+            if (core && fails >= 4) throw e;
+            vagGroupBackoffUntil.put(group, now + Math.min(60000L, 3000L * fails));
+            return null;
+        }
+    }
+
+    private void applyIfPresent(VagTp20.Block b) { if (b != null) applyVagBlock(b); }
+
     private void pollVagLoop() {
         // VCDS block 5 contains RPM + engine load + vehicle speed. It is the hard realtime lane.
         final int[] slowGroups = {113, 134, 210, 106, 31, 32, 20, 90, 91, 93, 15, 16};
         int slow=0, cycle=0;
         while (polling && vagMode && vag != null && vag.isOpen() && socket != null && socket.isConnected()) {
             try {
-                applyVagBlock(vag.readBlock(5));
+                applyIfPresent(readVagGroupSafe(5, true));
                 cycle++;
-                if ((cycle % 3) == 0) applyVagBlock(vag.readBlock(115));
-                if ((cycle % 8) == 0) applyVagBlock(vag.readBlock(4));
-                if ((cycle % 10) == 0) applyVagBlock(vag.readBlock(3));
-                if ((cycle % 12) == 0) applyVagBlock(vag.readBlock(slowGroups[slow++ % slowGroups.length]));
+                if ((cycle % 3) == 0) applyIfPresent(readVagGroupSafe(115, false));
+                if ((cycle % 8) == 0) applyIfPresent(readVagGroupSafe(4, false));
+                if ((cycle % 10) == 0) applyIfPresent(readVagGroupSafe(3, false));
+                if ((cycle % 12) == 0) applyIfPresent(readVagGroupSafe(slowGroups[slow++ % slowGroups.length], false));
                 if ((cycle % 24) == 0) vag.keepAlive();
             } catch (Exception e) {
                 appendSystemLog("VAG_READ_ERROR", safe(e.getMessage()));
@@ -1174,7 +1222,7 @@ public class MainActivity extends Activity {
                 case "0144": return ((A * 256) + B) * 2.0 / 65536.0;
                 case "0105":
                 case "010F":
-                case "0146":
+                case "0146": return (double)A - 40.0;
                 case "010B":
                 case "0133": return (double)A;
                 case "0111":
@@ -1659,7 +1707,7 @@ public class MainActivity extends Activity {
     private String buildRadioSystemReport() {
         StringBuilder r = new StringBuilder();
         r.append("# TouranLive Radio System Report\n");
-        r.append("app_version=0.5.6\n");
+        r.append("app_version=").append(BuildConfig.VERSION_NAME).append('\n');
         r.append("timestamp=").append(now()).append('\n');
         r.append("manufacturer=").append(safe(Build.MANUFACTURER)).append('\n');
         r.append("brand=").append(safe(Build.BRAND)).append('\n');
@@ -1695,6 +1743,10 @@ public class MainActivity extends Activity {
         r.append("feature_wifi=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_WIFI)).append('\n');
         r.append("feature_gps=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_LOCATION_GPS)).append('\n');
         r.append("feature_touch=").append(getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN)).append('\n');
+        r.append("vehicle_profile=").append(VehicleProfile.MODEL).append(" | ").append(VehicleProfile.ENGINE_TEXT).append(" | ").append(VehicleProfile.GEARBOX).append('\n');
+        r.append("production_date=").append(VehicleProfile.PRODUCTION_DATE).append('\n');
+        r.append("sales_type=").append(VehicleProfile.SALES_TYPE).append('\n');
+        r.append("equipment_profile=\n").append(VehicleProfile.compactEquipmentSummary()).append('\n');
 
         r.append("\n## /proc/cpuinfo\n").append(readSmallFile("/proc/cpuinfo", 18000));
         r.append("\n## /proc/meminfo\n").append(readSmallFile("/proc/meminfo", 12000));
