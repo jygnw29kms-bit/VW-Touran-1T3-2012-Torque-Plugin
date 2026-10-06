@@ -1717,7 +1717,7 @@ public class MainActivity extends Activity {
     private String buildRadioSystemReport() {
         StringBuilder r = new StringBuilder();
         r.append("# TouranLive Radio System Report\n");
-        r.append("app_version=").append(BuildConfig.VERSION_NAME).append('\n');
+        r.append("app_version=").append(appVersionName()).append('\n');
         r.append("timestamp=").append(now()).append('\n');
         r.append("manufacturer=").append(safe(Build.MANUFACTURER)).append('\n');
         r.append("brand=").append(safe(Build.BRAND)).append('\n');
@@ -1956,6 +1956,15 @@ public class MainActivity extends Activity {
     }
 
     private String safe(String s) { return s == null ? "" : s; }
+
+    private String appVersionName() {
+        try {
+            android.content.pm.PackageInfo p = getPackageManager().getPackageInfo(getPackageName(), 0);
+            return p.versionName == null ? "unknown" : p.versionName;
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
 
     private String fmt(double v) {
         if (Math.abs(v) >= 100 || Math.rint(v) == v)
