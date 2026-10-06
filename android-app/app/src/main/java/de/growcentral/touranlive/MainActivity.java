@@ -25,6 +25,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.StatFs;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -57,6 +58,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -80,6 +82,7 @@ public class MainActivity extends Activity {
     private static final int OK = Color.rgb(75, 190, 120);
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService netIo = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     private BluetoothSocket socket;
@@ -168,7 +171,7 @@ public class MainActivity extends Activity {
         showVehicle();
         requestBtPermission();
         startAutoUploadLoop();
-        io.execute(this::autoSendRadioAuditOnce);
+        netIo.execute(this::autoSendRadioAuditOnce);
     }
 
     private void buildShell() {
@@ -644,7 +647,7 @@ public class MainActivity extends Activity {
     private void startAutoUploadLoop() {
         if (autoUploadRunning) return;
         autoUploadRunning=true;
-        io.execute(() -> {
+        netIo.execute(() -> {
             while (autoUploadRunning) {
                 try {
                     long now=System.currentTimeMillis();
@@ -663,7 +666,7 @@ public class MainActivity extends Activity {
         try {
             if (!hasInternet()) return;
             Thread.sleep(2500);
-            runRadioSystemScanAndUpload();
+            runRadioSystemScanAndSend();
         } catch (Exception ignored) {}
     }
 
@@ -705,6 +708,16 @@ public class MainActivity extends Activity {
                 writer = socket.getOutputStream();
                 reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
 
+                // First collect the exact Mode-01 values confirmed by yesterday's VCDS OBD blockmap.
+                // VAG then overrides matching fields; OBD remains the per-field fallback, never a dummy value.
+                try {
+                    initElm();
+                    discoverSupportedPids();
+                    captureConfirmedObdBaseline();
+                } catch (Exception baselineError) {
+                    appendSystemLog("OBD_BASELINE_ERROR", safe(baselineError.getMessage()));
+                }
+
                 VagTp20 candidate = new VagTp20(reader, writer, this::appendSystemLog);
                 if (candidate.openEngine()) {
                     vag = candidate;
@@ -714,6 +727,7 @@ public class MainActivity extends Activity {
                     appendSystemLog("CONNECTED_VAG", target.getName());
                     setConnectionState("VAG: verbunden", OK);
                     postStatus("CAVC via VAG TP2.0/KWP2000 verbunden. VCDS-Messwertbloecke werden live gelesen.");
+                    netIo.execute(() -> uploadCurrentLogInternal(true));
                     pollVagLoop();
                     return;
                 }
@@ -726,7 +740,7 @@ public class MainActivity extends Activity {
                 polling = true;
                 appendSystemLog("CONNECTED_OBD", target.getName());
                 setConnectionState("OBD: verbunden", OK);
-                io.execute(this::runCapabilityScanAndUpload);
+                netIo.execute(() -> uploadCurrentLogInternal(true));
                 postStatus("Standard-OBD aktiv. VAG-Direktzugriff war mit diesem Adapter nicht verfuegbar.");
                 pollLoop();
             } catch (Exception e) {
@@ -765,6 +779,23 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void captureConfirmedObdBaseline() {
+        String[] baseline = {"010C","010D","0105","010F","0146","0142","0133","010B","0104","0111","0149","0123","0134","0144","0106","0107","013C","010E"};
+        for (String cmd : baseline) {
+            Pid target = null;
+            for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
+            if (target == null) continue;
+            try {
+                String raw = sendLive(cmd);
+                Double value = decode(cmd, raw);
+                appendPidLog(target, raw, value, "BASELINE_" + classify(raw, value));
+                if (value != null) updateTile(target.label, fmt(value), target.unit);
+            } catch (Exception e) {
+                appendPidLog(target, "", null, "BASELINE_ERROR:" + safe(e.getMessage()));
+            }
+        }
+    }
+
     private void probeUnadvertisedPid(String cmd) {
         Pid target = null;
         for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
@@ -799,15 +830,18 @@ public class MainActivity extends Activity {
     }
 
     private void pollVagLoop() {
-        // Groups are taken from this car's VCDS engine blockmap (MED17.5.5 / CAVC).
-        final int[] fastGroups = {4, 5, 3, 115};
+        // VCDS block 5 contains RPM + engine load + vehicle speed. It is the hard realtime lane.
         final int[] slowGroups = {113, 134, 210, 106, 31, 32, 20, 90, 91, 93, 15, 16};
-        int fast=0, slow=0, cycle=0;
+        int slow=0, cycle=0;
         while (polling && vagMode && vag != null && vag.isOpen() && socket != null && socket.isConnected()) {
             try {
-                applyVagBlock(vag.readBlock(fastGroups[fast++ % fastGroups.length]));
-                if ((cycle++ % 4) == 0) applyVagBlock(vag.readBlock(slowGroups[slow++ % slowGroups.length]));
-                if ((cycle % 20) == 0) vag.keepAlive();
+                applyVagBlock(vag.readBlock(5));
+                cycle++;
+                if ((cycle % 3) == 0) applyVagBlock(vag.readBlock(115));
+                if ((cycle % 8) == 0) applyVagBlock(vag.readBlock(4));
+                if ((cycle % 10) == 0) applyVagBlock(vag.readBlock(3));
+                if ((cycle % 12) == 0) applyVagBlock(vag.readBlock(slowGroups[slow++ % slowGroups.length]));
+                if ((cycle % 24) == 0) vag.keepAlive();
             } catch (Exception e) {
                 appendSystemLog("VAG_READ_ERROR", safe(e.getMessage()));
                 try { if (vag != null) vag.close(); } catch (Exception ignored) {}
@@ -835,7 +869,7 @@ public class MainActivity extends Activity {
             case 3:
                 putVag("Drehzahl", b.value(1));
                 putVag("VAG_Manifold", b.value(2));
-                putVag("Motorlast", b.value(3));
+                putVag("VAG_ThrottleRel", b.value(3));
                 putVag("VAG_Ignition", signedTiming(b,4));
                 break;
             case 4:
@@ -926,29 +960,16 @@ public class MainActivity extends Activity {
     private final Map<String, Integer> pidFailures = new HashMap<>();
 
     private void pollLoop() {
-        final String[] fast = {"010C","010D"}; // RPM, speed: highest priority
-        final String[] medium = {"010B","0104","0111","0149"}; // MAP, load, throttle, pedal
+        final String[] fast = {"010C","010D"};
+        final String[] medium = {"010B","0104","0111","0149"};
         final String[] slow = {"0105","010F","0146","0142","0133","0123","0134","0144","0106","0107","013C","0143","0145","0147","014A","014C","012E","011F","0121","0130","0131","0156"};
-        int fi=0, mi=0, si=0;
-        long nextFast=0, nextMedium=0, nextSlow=0;
+        int fi=0, mi=0, si=0, cycle=0;
         while (polling && socket != null && socket.isConnected()) {
-            long now=SystemClock.elapsedRealtime();
             try {
-                if (now >= nextFast) {
-                    pollPidAdaptive(fast[fi++ % fast.length], true);
-                    nextFast = SystemClock.elapsedRealtime() + 70; // target ~7 Hz per fast PID on typical ELM clones
-                    continue;
-                }
-                if (now >= nextMedium) {
-                    pollPidAdaptive(medium[mi++ % medium.length], true);
-                    nextMedium = SystemClock.elapsedRealtime() + 140;
-                    continue;
-                }
-                if (now >= nextSlow) {
-                    pollPidAdaptive(slow[si++ % slow.length], false);
-                    nextSlow = SystemClock.elapsedRealtime() + 350;
-                    continue;
-                }
+                pollPidAdaptive(fast[fi++ % fast.length], true);
+                cycle++;
+                if ((cycle % 3) == 0) pollPidAdaptive(medium[mi++ % medium.length], true);
+                if ((cycle % 12) == 0) pollPidAdaptive(slow[si++ % slow.length], false);
                 Thread.sleep(2);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -1206,8 +1227,13 @@ public class MainActivity extends Activity {
             Double d = displayValues.get(key);
             return d != null ? d : liveValues.get(key);
         }
+        private Double vAny(String... keys) {
+            for (String key : keys) { Double d=v(key); if (d!=null) return d; }
+            return null;
+        }
         private String n(String key) { Double d=v(key); return d==null?"—":fmt(d); }
         private String val(String key,String unit) { Double d=v(key); return d==null?"—":fmt(d)+(unit.isEmpty()?"":" "+unit); }
+        private String valAny(String unit,String... keys) { Double d=vAny(keys); return d==null?"—":fmt(d)+(unit.isEmpty()?"":" "+unit); }
         private float X(float x){ return x*sx; }
         private float Y(float y){ return y*sy; }
         private float S(float a){ return a*Math.min(sx,sy); }
@@ -1277,6 +1303,16 @@ public class MainActivity extends Activity {
             txt(c,val(key,unit),cx,cy+44,20,TEXT,Paint.Align.CENTER,true); txt(c,title,cx,cy+69,14,MUTED,Paint.Align.CENTER,false);
         }
 
+        private void miniGaugeAny(Canvas c,float cx,float cy,float r,String title,String unit,double min,double max,String... keys){
+            p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(4,6,8));c.drawCircle(X(cx),Y(cy),S(r),p);
+            p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(S(3));p.setColor(Color.rgb(130,135,140));c.drawCircle(X(cx),Y(cy),S(r),p);
+            float start=145f,sweep=250f;
+            for(int i=0;i<=10;i++){ float a=(float)Math.toRadians(start+sweep*i/10f); float ro=r-8,ri=ro-(i%5==0?14:8); line(c,TEXT,i%5==0?2.3f:1.2f,cx+(float)Math.cos(a)*ri,cy+(float)Math.sin(a)*ri,cx+(float)Math.cos(a)*ro,cy+(float)Math.sin(a)*ro); }
+            Double d=vAny(keys); double q=d==null?min:Math.max(min,Math.min(max,d)); float f=(float)((q-min)/(max-min)); float a=(float)Math.toRadians(start+sweep*f);
+            line(c,RED,6,cx,cy,cx+(float)Math.cos(a)*(r-28),cy+(float)Math.sin(a)*(r-28)); p.setStyle(Paint.Style.FILL);p.setColor(Color.rgb(18,20,23));c.drawCircle(X(cx),Y(cy),S(12),p);
+            txt(c,valAny(unit,keys),cx,cy+44,20,TEXT,Paint.Align.CENTER,true); txt(c,title,cx,cy+69,14,MUTED,Paint.Align.CENTER,false);
+        }
+
         private void mfaRow(Canvas c,float y,String label,String key,String unit){
             line(c,Color.rgb(50,54,60),1.3f,608,y+28,1054,y+28);
             txt(c,label,668,y+4,18,MUTED,Paint.Align.LEFT,false);
@@ -1301,37 +1337,44 @@ public class MainActivity extends Activity {
             super.onDraw(c); sx=getWidth()/BW; sy=getHeight()/BH;
             fill(c,Color.rgb(2,4,7),0,0,1024,600);
             fill(c,Color.rgb(5,8,11),0,0,1024,50); line(c,RED,2,195,49,815,49);
-            txt(c,"VW",35,31,16,TEXT,Paint.Align.CENTER,true); txt(c,"Touran 1T3",66,22,22,TEXT,Paint.Align.LEFT,true);
-            txt(c,"2012 | 1.4 TSI | CAVC",66,42,13,MUTED,Paint.Align.LEFT,false);
-            txt(c,"Fahrt",315,31,18,TEXT,Paint.Align.CENTER,true); txt(c,"Motor",420,31,16,MUTED,Paint.Align.CENTER,false);
-            txt(c,"Ladedruck",520,31,16,MUTED,Paint.Align.CENTER,false); txt(c,"Kraftstoff",630,31,16,MUTED,Paint.Align.CENTER,false);
-            txt(c,(mfaPage+1)+"/4",735,31,17,TEXT,Paint.Align.CENTER,true);
+            txt(c,"VW",31,31,16,TEXT,Paint.Align.CENTER,true); txt(c,"135er Touran Live",62,23,21,TEXT,Paint.Align.LEFT,true);
+            txt(c,"VW Touran 1T3 | CAVC 1.4 TSI 140 PS",62,42,12,MUTED,Paint.Align.LEFT,false);
+            txt(c,"Fahrzeugansicht (MFA) - Seite "+(mfaPage+1)+"/4",512,31,17,TEXT,Paint.Align.CENTER,true);
             txt(c,polling?(vagMode?"VAG verbunden":"OBD verbunden"):"getrennt",865,22,14,polling?OK:RED,Paint.Align.RIGHT,true);
             txt(c,polling?protocolName:"-",865,40,11,MUTED,Paint.Align.RIGHT,false);
             txt(c,new SimpleDateFormat("HH:mm",Locale.GERMANY).format(new Date()),1000,23,18,TEXT,Paint.Align.RIGHT,true);
             txt(c,new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date()),1000,41,11,MUTED,Paint.Align.RIGHT,false);
             gauge(c,160,195,145,8000,"Drehzahl",true); gauge(c,864,195,145,240,"Geschwindigkeit",false);
-            miniGauge(c,80,365,62,"K\u00fchlmittel",vagMode?"VAG_Coolant":"K\u00fchlmittel","\u00b0C",50,130);
-            miniGauge(c,245,365,62,"\u00d6ltemperatur",vagMode?"VAG_OilTemp":"__NA__","\u00b0C",50,150);
-            miniGauge(c,779,365,62,"Bordspannung",vagMode?"VAG_Voltage":"ECU-Spannung","V",10,16);
-            miniGauge(c,944,365,62,"Au\u00dfentemperatur","Au\u00dfentemperatur","\u00b0C",-20,50);
+            miniGaugeAny(c,80,365,62,"K\u00fchlmittel","\u00b0C",50,130,"VAG_Coolant","K\u00fchlmittel");
+            miniGaugeAny(c,245,365,62,"\u00d6ltemperatur","\u00b0C",50,150,"VAG_OilTemp");
+            miniGaugeAny(c,779,365,62,"Bordspannung","V",10,16,"VAG_Voltage","ECU-Spannung");
+            miniGaugeAny(c,944,365,62,"Au\u00dfentemperatur","\u00b0C",-20,50,"Au\u00dfentemperatur");
             round(c,Color.rgb(7,10,14),326,60,698,270,10); strokeRound(c,Color.rgb(45,50,56),326,60,698,270,10,1.5f);
             txt(c,"<",347,92,26,TEXT,Paint.Align.CENTER,true); txt(c,(mfaPage+1)+"/4",512,90,18,TEXT,Paint.Align.CENTER,true); txt(c,">",676,92,26,TEXT,Paint.Align.CENTER,true); line(c,RED,2,340,102,684,102);
-            String boostActual=vagMode?"VAG_BoostActualRel":"Saugrohrdruck rel.";
-            String boostTarget=vagMode?"VAG_BoostTargetRel":"__NA__";
-            String rail=vagMode?"VAG_Rail":"Kraftstoffdruck";
-            String lambdaActual=vagMode?"VAG_LambdaActual":"Lambda Ist";
-            String lambdaTarget=vagMode?"VAG_LambdaTarget":"Lambda Soll";
-            String trimShort=vagMode?"VAG_AdaptIdle":"Fuel Trim kurz";
-            String trimLong=vagMode?"VAG_AdaptPart":"Fuel Trim lang";
             if(mfaPage==0){
-                masterRow(c,126,"Ladedruck Ist",boostActual,"bar"); masterRow(c,158,"Ladedruck Soll",boostTarget,"bar"); masterRow(c,190,"Motorlast","Motorlast","%"); masterRow(c,222,"Raildruck",rail,"bar"); masterRow(c,254,"Lambda Ist",lambdaActual,"lambda");
+                masterRowAny(c,126,"Ladedruck Ist","bar","VAG_BoostActualRel","Saugrohrdruck rel.");
+                masterRowAny(c,158,"Ladedruck Soll","bar","VAG_BoostTargetRel");
+                masterRowAny(c,190,"Motorlast","%","Motorlast","Absolute Last");
+                masterRowAny(c,222,"Raildruck","bar","VAG_Rail","Kraftstoffdruck");
+                masterRowAny(c,254,"Lambda Ist","λ","VAG_LambdaActual","Lambda Ist");
             } else if(mfaPage==1){
-                masterRow(c,126,"\u00d6ltemperatur",vagMode?"VAG_OilTemp":"__NA__","\u00b0C"); masterRow(c,158,"K\u00fchlmittel",vagMode?"VAG_Coolant":"K\u00fchlmittel","\u00b0C"); masterRow(c,190,"Ansaugluft",vagMode?"VAG_IntakeTemp":"Ansaugluft","\u00b0C"); masterRow(c,222,"Bordspannung",vagMode?"VAG_Voltage":"ECU-Spannung","V"); masterRow(c,254,"Au\u00dfentemperatur","Au\u00dfentemperatur","\u00b0C");
+                masterRowAny(c,126,"\u00d6ltemperatur","\u00b0C","VAG_OilTemp");
+                masterRowAny(c,158,"K\u00fchlmittel","\u00b0C","VAG_Coolant","K\u00fchlmittel");
+                masterRowAny(c,190,"Ansaugluft","\u00b0C","VAG_IntakeTemp","Ansaugluft");
+                masterRowAny(c,222,"Bordspannung","V","VAG_Voltage","ECU-Spannung");
+                masterRowAny(c,254,"Au\u00dfentemperatur","\u00b0C","Au\u00dfentemperatur");
             } else if(mfaPage==2){
-                masterRow(c,126,"Lambda Ist",lambdaActual,"lambda"); masterRow(c,158,"Lambda Soll",lambdaTarget,"lambda"); masterRow(c,190,"STFT / Adapt. kurz",trimShort,"%"); masterRow(c,222,"LTFT / Adapt. lang",trimLong,"%"); masterRow(c,254,"Kat-Temperatur","Kat-Temperatur","\u00b0C");
+                masterRowAny(c,126,"Lambda Ist","λ","VAG_LambdaActual","Lambda Ist");
+                masterRowAny(c,158,"Lambda Soll","λ","VAG_LambdaTarget","Lambda Soll");
+                masterRowAny(c,190,"STFT / Adapt. kurz","%","VAG_AdaptIdle","Fuel Trim kurz");
+                masterRowAny(c,222,"LTFT / Adapt. lang","%","VAG_AdaptPart","Fuel Trim lang");
+                masterRowAny(c,254,"Kat-Temperatur","\u00b0C","Kat-Temperatur");
             } else {
-                masterRow(c,126,"Z\u00fcndwinkel",vagMode?"VAG_Ignition":"Z\u00fcndwinkel","\u00b0KW"); masterRow(c,158,"Nockenwelle Soll",vagMode?"VAG_CamTarget":"__NA__","\u00b0KW"); masterRow(c,190,"Nockenwelle Ist",vagMode?"VAG_CamActual":"__NA__","\u00b0KW"); masterRow(c,222,"Luftmasse",vagMode?"VAG_MAF":"__NA__","g/s"); masterRow(c,254,"Drosselklappe","Drosselklappe","%");
+                masterRowAny(c,126,"Z\u00fcndwinkel","\u00b0","VAG_Ignition","Z\u00fcndwinkel");
+                masterRowAny(c,158,"Nockenwelle Soll","\u00b0KW","VAG_CamTarget");
+                masterRowAny(c,190,"Nockenwelle Ist","\u00b0KW","VAG_CamActual");
+                masterRowAny(c,222,"Luftmasse","g/s","VAG_MAF");
+                masterRowAny(c,254,"Drosselklappe","%","Drosselklappe","VAG_ThrottleRel");
             }
             round(c,Color.rgb(5,7,10),305,278,719,463,8);
             if(masterCar!=null){ RectF dst=new RectF(X(330),Y(286),X(694),Y(455)); p.setAlpha(255); c.drawBitmap(masterCar,null,dst,p); }
@@ -1341,13 +1384,14 @@ public class MainActivity extends Activity {
             txt(c,"OBD Fallback",270,494,14,TEXT,Paint.Align.LEFT,true); txt(c,vagMode?"bereit":"aktiv",270,513,11,vagMode?MUTED:OK,Paint.Align.LEFT,false);
             txt(c,"Logger",500,494,14,TEXT,Paint.Align.LEFT,true); txt(c,logRows+" Zeilen",500,513,11,MUTED,Paint.Align.LEFT,false);
             int dc="Keine Fehler gemeldet".equals(dtcStatus)?OK:MUTED; txt(c,"DTC",735,494,14,TEXT,Paint.Align.LEFT,true); txt(c,dtcStatus,735,513,11,dc,Paint.Align.LEFT,false);
-            masterNav(c,0,170,"Tacho",true); masterNav(c,171,340,"Fahrzeug",false); masterNav(c,341,510,"Live",false); masterNav(c,511,680,"Logger",false); masterNav(c,681,850,"Apps",false); masterNav(c,851,1024,"Einstellungen",false);
+            masterNav(c,0,170,"Tacho",true); masterNav(c,171,340,"Live",false); masterNav(c,341,510,"Diagnose",false); masterNav(c,511,680,"Logger",false); masterNav(c,681,850,"Apps",false); masterNav(c,851,1024,"VCDS",false);
         }
         private void masterRow(Canvas c,float y,String label,String key,String unit){ line(c,Color.rgb(40,45,51),1,340,y+14,684,y+14); txt(c,label,346,y,13,MUTED,Paint.Align.LEFT,false); txt(c,val(key,unit),678,y,15,TEXT,Paint.Align.RIGHT,true); }
+        private void masterRowAny(Canvas c,float y,String label,String unit,String... keys){ line(c,Color.rgb(40,45,51),1,340,y+14,684,y+14); txt(c,label,346,y,13,MUTED,Paint.Align.LEFT,false); txt(c,valAny(unit,keys),678,y,15,TEXT,Paint.Align.RIGHT,true); }
         private void masterNav(Canvas c,float l,float r,String label,boolean active){ round(c,active?Color.rgb(28,7,9):Color.rgb(7,10,13),l+4,527,r-4,596,7); strokeRound(c,active?RED:Color.rgb(42,47,53),l+4,527,r-4,596,7,active?2:1); txt(c,label,(l+r)/2,568,17,active?TEXT:Color.rgb(205,209,214),Paint.Align.CENTER,true); }
         @Override public boolean onTouchEvent(android.view.MotionEvent e){
             float x=e.getX()/sx,y=e.getY()/sy; if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){touchDownX=x;return true;} if(e.getAction()!=android.view.MotionEvent.ACTION_UP)return true;
-            if(y>=527){ if(x<170){invalidate();return true;} if(x<340){buildShell();showVehicle();return true;} if(x<510){buildShell();showHome();return true;} if(x<680){buildShell();showLogger();return true;} if(x<850){buildShell();showApps();return true;} openSettings();return true; }
+            if(y>=527){ if(x<170){invalidate();return true;} if(x<340){buildShell();showHome();return true;} if(x<510){buildShell();showDiagnostics();return true;} if(x<680){buildShell();showLogger();return true;} if(x<850){buildShell();showApps();return true;} buildShell();showVcds();return true; }
             if(y>=60&&y<=270&&x>=326&&x<=698){ float dx=x-touchDownX; if(Math.abs(dx)>45){mfaPage=(mfaPage+(dx<0?1:3))%4;invalidate();return true;} if(y<110&&x<390){mfaPage=(mfaPage+3)%4;invalidate();return true;} if(y<110&&x>635){mfaPage=(mfaPage+1)%4;invalidate();return true;} }
             if(y>=470&&y<523&&x<220){if(polling)disconnect();else connect();return true;} return true;
         }
@@ -1468,7 +1512,7 @@ public class MainActivity extends Activity {
     }
 
     private void uploadCurrentLog(boolean capabilityReport) {
-        io.execute(() -> uploadCurrentLogInternal(capabilityReport));
+        netIo.execute(() -> uploadCurrentLogInternal(capabilityReport));
     }
 
     private void uploadCurrentLogInternal(boolean capabilityReport) {
@@ -1530,7 +1574,7 @@ public class MainActivity extends Activity {
     }
 
     private void runRadioSystemScanAndSend() {
-        io.execute(() -> {
+        netIo.execute(() -> {
             try {
                 String report = buildRadioSystemReport();
                 boolean ok = uploadReport("radio-system", report);
@@ -1545,7 +1589,7 @@ public class MainActivity extends Activity {
     private String buildRadioSystemReport() {
         StringBuilder r = new StringBuilder();
         r.append("# TouranLive Radio System Report\n");
-        r.append("app_version=0.5.2\n");
+        r.append("app_version=0.5.6\n");
         r.append("timestamp=").append(now()).append('\n');
         r.append("manufacturer=").append(safe(Build.MANUFACTURER)).append('\n');
         r.append("brand=").append(safe(Build.BRAND)).append('\n');
