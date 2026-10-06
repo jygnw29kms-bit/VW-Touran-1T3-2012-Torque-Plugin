@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
     private BufferedReader reader;
     private OutputStream writer;
     private volatile boolean polling = false;
+    private int connectRetryCount = 0;
     private volatile boolean autoUploadRunning = false;
     private long lastAutoUploadAt = 0L;
     private static final long AUTO_UPLOAD_INTERVAL_MS = 60000L;
@@ -669,7 +670,18 @@ public class MainActivity extends Activity {
             android.net.Network n=cm.getActiveNetwork();
             if (n==null) return false;
             NetworkCapabilities c=cm.getNetworkCapabilities(n);
-            return c!=null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+            return c!=null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch(Exception e) { return false; }
+    }
+
+    private boolean isNetworkValidated() {
+        try {
+            ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+            if (cm==null) return false;
+            android.net.Network n=cm.getActiveNetwork();
+            if (n==null) return false;
+            NetworkCapabilities c=cm.getNetworkCapabilities(n);
+            return c!=null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
         } catch(Exception e) { return false; }
     }
 
@@ -695,15 +707,17 @@ public class MainActivity extends Activity {
             }
         } catch (Exception ignored) {}
         boolean net = hasInternet();
+        boolean validated = isNetworkValidated();
         boolean storage = getFilesDir() != null && getFilesDir().canWrite();
-        String server = net ? testUploadEndpoint() : "kein Internet";
+        String server = internetPerm && net ? testUploadEndpoint() : "kein aktiver Internet-Transport";
         r.append(internetPerm ? "OK" : "FEHLER").append("  INTERNET-Recht\n");
         r.append(btPresent ? "OK" : "FEHLER").append("  Bluetooth-Hardware\n");
         r.append(btEnabled ? "OK" : "FEHLER").append("  Bluetooth eingeschaltet\n");
         r.append(btConnect ? "OK" : "FEHLER").append("  BLUETOOTH_CONNECT\n");
         r.append(btScan ? "OK" : "FEHLER").append("  BLUETOOTH_SCAN\n");
         r.append(pairedObd ? "OK" : "WARNUNG").append("  gekoppelter OBD/ELM327 gefunden\n");
-        r.append(net ? "OK" : "FEHLER").append("  Internet validiert\n");
+        r.append(net ? "OK" : "FEHLER").append("  Internet-Transport vorhanden\n");
+        r.append(validated ? "OK" : "INFO").append("  Android-Netzwerk validiert\n");
         r.append(storage ? "OK" : "FEHLER").append("  App-Speicher beschreibbar\n");
         r.append("INFO  Fahrzeugprofil: ").append(VehicleProfile.MODEL).append(" / ").append(VehicleProfile.ENGINE).append(" / ").append(VehicleProfile.GEARBOX).append("\n");
         r.append("INFO  9Q5 MFA+, 7X5 Parklenkassistent, 9AK Climatronic, 8T2 GRA vorhanden\n");
@@ -723,7 +737,7 @@ public class MainActivity extends Activity {
             c.setRequestProperty("Content-Type", "text/plain; charset=utf-8");
             c.setRequestProperty("X-Touran-Install", getInstallId());
             c.setRequestProperty("X-Touran-Report", "log");
-            byte[] b = ("TouranLive selfcheck 0.5.7 " + now()).getBytes(StandardCharsets.UTF_8);
+            byte[] b = ("TouranLive selfcheck " + appVersionName() + " " + now()).getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(b.length);
             try (OutputStream o = c.getOutputStream()) { o.write(b); }
             int code = c.getResponseCode();
@@ -799,10 +813,7 @@ public class MainActivity extends Activity {
                 if (target == null) throw new Exception("Kein bereits gekoppelter OBD/ELM327-Adapter gefunden.");
 
                 postStatus("Verbinde mit " + target.getName() + " …");
-                socket = target.createRfcommSocketToServiceRecord(SPP_UUID);
-                socket.connect();
-                writer = socket.getOutputStream();
-                reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                openObdTransport(adapter, target);
 
                 // First collect the exact Mode-01 values confirmed by yesterday's VCDS OBD blockmap.
                 // VAG then overrides matching fields; OBD remains the per-field fallback, never a dummy value.
@@ -819,6 +830,7 @@ public class MainActivity extends Activity {
                     vag = candidate;
                     vagMode = true;
                     polling = true;
+                    connectRetryCount = 0;
                     protocolName = "VAG TP2.0 / KWP2000";
                     appendSystemLog("CONNECTED_VAG", target.getName());
                     setConnectionState("VAG: verbunden", OK);
@@ -831,21 +843,62 @@ public class MainActivity extends Activity {
                 vag = null;
                 vagMode = false;
                 appendSystemLog("VAG_FALLBACK", "TP2.0/KWP2000 nicht verfuegbar; Standard-OBD wird verwendet");
+                try {
+                    send("ATI");
+                } catch (Exception transportError) {
+                    appendSystemLog("OBD_TRANSPORT_RECOVER", safe(transportError.getMessage()));
+                    closeSocket();
+                    Thread.sleep(300);
+                    openObdTransport(adapter, target);
+                }
                 initElm();
                 discoverSupportedPids();
                 polling = true;
+                connectRetryCount = 0;
                 appendSystemLog("CONNECTED_OBD", target.getName());
                 setConnectionState("OBD: verbunden", OK);
                 netIo.execute(() -> uploadCurrentLogInternal(true));
                 postStatus("Standard-OBD aktiv. VAG-Direktzugriff war mit diesem Adapter nicht verfuegbar.");
                 pollLoop();
             } catch (Exception e) {
-                appendSystemLog("CONNECT_ERROR", safe(e.getMessage()));
+                String msg = safe(e.getMessage());
+                appendSystemLog("CONNECT_ERROR", msg);
                 setConnectionState("OBD: getrennt", RED);
-                postStatus("Verbindung fehlgeschlagen: " + safe(e.getMessage()));
                 closeSocket();
+                if (isTransportFailure(msg) && connectRetryCount < 1) {
+                    connectRetryCount++;
+                    postStatus("Bluetooth-OBD Stream abgebrochen; automatischer Neuaufbau …");
+                    ui.postDelayed(this::connect, 1200);
+                } else {
+                    postStatus("Verbindung fehlgeschlagen: " + msg);
+                }
             }
         });
+    }
+
+    private void openObdTransport(BluetoothAdapter adapter, BluetoothDevice target) throws Exception {
+        try { adapter.cancelDiscovery(); } catch (Exception ignored) {}
+        BluetoothSocket candidate = null;
+        try {
+            candidate = target.createRfcommSocketToServiceRecord(SPP_UUID);
+            candidate.connect();
+            appendSystemLog("BT_SPP_CONNECTED", "secure");
+        } catch (Exception secureError) {
+            try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
+            appendSystemLog("BT_SPP_SECURE_FAIL", safe(secureError.getMessage()));
+            candidate = target.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
+            candidate.connect();
+            appendSystemLog("BT_SPP_CONNECTED", "insecure-fallback");
+        }
+        socket = candidate;
+        writer = socket.getOutputStream();
+        reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+    }
+
+    private boolean isTransportFailure(String message) {
+        String m = message == null ? "" : message.toLowerCase(Locale.ROOT);
+        return m.contains("broken pipe") || m.contains("socket closed") || m.contains("connection reset") ||
+                m.contains("read failed") || m.contains("connection abort") || m.contains("software caused connection abort");
     }
 
     private void initElm() throws Exception {
