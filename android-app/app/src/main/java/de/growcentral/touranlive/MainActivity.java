@@ -17,6 +17,8 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -84,6 +86,9 @@ public class MainActivity extends Activity {
     private BufferedReader reader;
     private OutputStream writer;
     private volatile boolean polling = false;
+    private volatile boolean autoUploadRunning = false;
+    private long lastAutoUploadAt = 0L;
+    private static final long AUTO_UPLOAD_INTERVAL_MS = 60000L;
     private volatile boolean vagMode = false;
     private VagTp20 vag;
 
@@ -162,6 +167,8 @@ public class MainActivity extends Activity {
         buildShell();
         showVehicle();
         requestBtPermission();
+        startAutoUploadLoop();
+        io.execute(this::autoSendRadioAuditOnce);
     }
 
     private void buildShell() {
@@ -623,6 +630,43 @@ public class MainActivity extends Activity {
         catch (Exception e) { toast("Start fehlgeschlagen: " + e.getMessage()); }
     }
 
+    private boolean hasInternet() {
+        try {
+            ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+            if (cm==null) return false;
+            android.net.Network n=cm.getActiveNetwork();
+            if (n==null) return false;
+            NetworkCapabilities c=cm.getNetworkCapabilities(n);
+            return c!=null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+        } catch(Exception e) { return false; }
+    }
+
+    private void startAutoUploadLoop() {
+        if (autoUploadRunning) return;
+        autoUploadRunning=true;
+        io.execute(() -> {
+            while (autoUploadRunning) {
+                try {
+                    long now=System.currentTimeMillis();
+                    if (hasInternet() && now-lastAutoUploadAt>=AUTO_UPLOAD_INTERVAL_MS) {
+                        uploadCurrentLog(true);
+                        lastAutoUploadAt=now;
+                    }
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+                catch (Exception ignored) {}
+            }
+        });
+    }
+
+    private void autoSendRadioAuditOnce() {
+        try {
+            if (!hasInternet()) return;
+            Thread.sleep(2500);
+            runRadioSystemScanAndUpload();
+        } catch (Exception ignored) {}
+    }
+
     private void requestBtPermission() {
         if (Build.VERSION.SDK_INT >= 31 &&
                 checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
@@ -682,6 +726,7 @@ public class MainActivity extends Activity {
                 polling = true;
                 appendSystemLog("CONNECTED_OBD", target.getName());
                 setConnectionState("OBD: verbunden", OK);
+                io.execute(this::runCapabilityScanAndUpload);
                 postStatus("Standard-OBD aktiv. VAG-Direktzugriff war mit diesem Adapter nicht verfuegbar.");
                 pollLoop();
             } catch (Exception e) {
