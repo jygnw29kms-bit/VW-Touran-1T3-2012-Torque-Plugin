@@ -702,8 +702,8 @@ public class MainActivity extends Activity {
         String sp6 = send("ATSP6");
         logCommand("ATSP6", sp6);
         if (sp6 == null || sp6.toUpperCase(Locale.ROOT).contains("ERROR") || sp6.contains("?")) logCommand("ATSP0", send("ATSP0"));
-        logCommand("ATAT1", send("ATAT1"));
-        logCommand("ATST0A", send("ATST0A")); // 40 ms ELM timeout target for fast lane
+        logCommand("ATAT2", send("ATAT2"));
+        logCommand("ATST08", send("ATST08")); // 32 ms base timeout; app still enforces bounded read windows
         String dp = send("ATDP");
         protocolName = dp == null || dp.trim().isEmpty() ? "unbekannt" : dp.trim();
         logCommand("ATDP", dp);
@@ -875,91 +875,102 @@ public class MainActivity extends Activity {
         });
     }
 
+    // ELM327 is strictly half-duplex: one request can be in flight at a time.
+    // Fast gauges therefore get priority; slow/optional PIDs are sampled in small gaps only.
+    private final Map<String, Long> pidBackoffUntil = new HashMap<>();
+    private final Map<String, Integer> pidFailures = new HashMap<>();
+
     private void pollLoop() {
-        // VCDS-basierter Fast-Path: RPM (0C), Speed (0D), MAP (0B) mit Zielintervall 50 ms.
-        // Das ist das Anforderungsintervall; die reale Rate bleibt durch ECU/Adapter begrenzt.
-        final String[] normal = {"0104","0111","0149","010E","0123","0134","0144","0106","0107","0143","0145","0147","014A","014C","012E","0105","010F","0146","0142","0133","013C","011F","0121","0130","0131","0156"};
-        int idx=0;
-        long nextRpm=0, nextSpeed=0, nextMap=0, nextNormal=0;
+        final String[] fast = {"010C","010D"}; // RPM, speed: highest priority
+        final String[] medium = {"010B","0104","0111","0149"}; // MAP, load, throttle, pedal
+        final String[] slow = {"0105","010F","0146","0142","0133","0123","0134","0144","0106","0107","013C","0143","0145","0147","014A","014C","012E","011F","0121","0130","0131","0156"};
+        int fi=0, mi=0, si=0;
+        long nextFast=0, nextMedium=0, nextSlow=0;
         while (polling && socket != null && socket.isConnected()) {
-            long now=System.currentTimeMillis();
-            boolean did=false;
-            if (now>=nextRpm) { pollFastPid("010C"); nextRpm=now+50; did=true; }
-            now=System.currentTimeMillis();
-            if (now>=nextSpeed) { pollFastPid("010D"); nextSpeed=now+50; did=true; }
-            now=System.currentTimeMillis();
-            if (now>=nextMap) { pollFastPid("010B"); nextMap=now+50; did=true; }
-            now=System.currentTimeMillis();
-            if (now>=nextNormal) { pollPid(normal[idx++ % normal.length]); nextNormal=now+180; did=true; }
-            if (!did) { try { Thread.sleep(1); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; } }
+            long now=SystemClock.elapsedRealtime();
+            try {
+                if (now >= nextFast) {
+                    pollPidAdaptive(fast[fi++ % fast.length], true);
+                    nextFast = SystemClock.elapsedRealtime() + 70; // target ~7 Hz per fast PID on typical ELM clones
+                    continue;
+                }
+                if (now >= nextMedium) {
+                    pollPidAdaptive(medium[mi++ % medium.length], true);
+                    nextMedium = SystemClock.elapsedRealtime() + 140;
+                    continue;
+                }
+                if (now >= nextSlow) {
+                    pollPidAdaptive(slow[si++ % slow.length], false);
+                    nextSlow = SystemClock.elapsedRealtime() + 350;
+                    continue;
+                }
+                Thread.sleep(2);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
+
+    private void pollPidAdaptive(String cmd, boolean fastLane) {
+        if (!polling) return;
+        long now = SystemClock.elapsedRealtime();
+        Long blocked = pidBackoffUntil.get(cmd);
+        if (blocked != null && blocked > now) return;
+        Pid target = null;
+        for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
+        if (target == null) return;
+        try {
+            String raw = fastLane ? sendFast(cmd) : sendLive(cmd);
+            Double value = decode(cmd, raw);
+            String state = classify(raw, value);
+            if (value != null) {
+                pidFailures.put(cmd, 0);
+                pidBackoffUntil.remove(cmd);
+                if (!fastLane || (++fastLogDivider % 12)==0) appendPidLog(target, raw, value, state);
+                updateTile(target.label, fmt(value), target.unit);
+            } else {
+                int fails = pidFailures.containsKey(cmd) ? pidFailures.get(cmd) + 1 : 1;
+                pidFailures.put(cmd, fails);
+                appendPidLog(target, raw, null, state);
+                if (fails >= 2) pidBackoffUntil.put(cmd, now + Math.min(30000L, 2500L * fails));
+            }
+        } catch (Exception e) {
+            int fails = pidFailures.containsKey(cmd) ? pidFailures.get(cmd) + 1 : 1;
+            pidFailures.put(cmd, fails);
+            pidBackoffUntil.put(cmd, now + Math.min(30000L, 2500L * fails));
+            appendPidLog(target, "", null, "ERROR:" + safe(e.getMessage()));
         }
     }
 
     private int fastLogDivider = 0;
-    private void pollFastPid(String cmd) {
-        if (!polling) return;
-        Pid target = null;
-        for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
-        if (target == null) return;
-        try {
-            String raw = sendFast(cmd);
-            Double value = decode(cmd, raw);
-            String state = classify(raw, value);
-            // Fast-PIDs nicht bei jedem Sample in den String-Logger schreiben: reduziert UI/GC-Latenz.
-            if (value == null || (++fastLogDivider % 10)==0) appendPidLog(target, raw, value, state);
-            if (value != null) updateTile(target.label, fmt(value), target.unit);
-        } catch (Exception e) {
-            appendPidLog(target, "", null, "ERROR:" + safe(e.getMessage()));
-        }
-    }
-
-    private void pollPid(String cmd) {
-        if (!polling) return;
-        Pid target = null;
-        for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
-        if (target == null) return;
-        try {
-            String raw = sendLive(cmd);
-            Double value = decode(cmd, raw);
-            String state = classify(raw, value);
-            appendPidLog(target, raw, value, state);
-            if (value != null) updateTile(target.label, fmt(value), target.unit);
-        } catch (Exception e) {
-            appendPidLog(target, "", null, "ERROR:" + safe(e.getMessage()));
-        }
-    }
 
     private String sendFast(String cmd) throws Exception {
         writer.write((cmd + "\r").getBytes(StandardCharsets.US_ASCII));
         writer.flush();
-        StringBuilder sb = new StringBuilder();
-        long end = System.currentTimeMillis() + 80;
-        while (System.currentTimeMillis() < end) {
-            if (reader.ready()) {
-                int c = reader.read();
-                if (c < 0) break;
-                char ch = (char)c;
-                if (ch == '>') break;
-                sb.append(ch);
-            } else Thread.sleep(1);
-        }
-        return sb.toString().replace("\r", " ").replace("\n", " ").trim();
+        return readElmResponse(125);
     }
 
     private String sendLive(String cmd) throws Exception {
         writer.write((cmd + "\r").getBytes(StandardCharsets.US_ASCII));
         writer.flush();
+        return readElmResponse(260);
+    }
+
+    private String readElmResponse(long timeoutMs) throws Exception {
         StringBuilder sb = new StringBuilder();
-        long end = System.currentTimeMillis() + 700;
-        while (System.currentTimeMillis() < end) {
+        long end = SystemClock.elapsedRealtime() + timeoutMs;
+        boolean gotAny = false;
+        while (SystemClock.elapsedRealtime() < end) {
             if (reader.ready()) {
                 int c = reader.read();
                 if (c < 0) break;
                 char ch = (char)c;
+                gotAny = true;
                 if (ch == '>') break;
                 sb.append(ch);
             } else {
-                Thread.sleep(5);
+                if (gotAny && sb.length() > 0) Thread.sleep(1); else Thread.sleep(2);
             }
         }
         return sb.toString().replace("\r", " ").replace("\n", " ").trim();
