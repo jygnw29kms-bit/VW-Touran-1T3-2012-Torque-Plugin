@@ -1470,11 +1470,12 @@ public class MainActivity extends Activity {
             round(c,Color.rgb(7,10,14),326,60,698,270,10); strokeRound(c,Color.rgb(45,50,56),326,60,698,270,10,1.5f);
             txt(c,"<",347,92,26,TEXT,Paint.Align.CENTER,true); txt(c,(mfaPage+1)+"/4",512,90,18,TEXT,Paint.Align.CENTER,true); txt(c,">",676,92,26,TEXT,Paint.Align.CENTER,true); line(c,RED,2,340,102,684,102);
             if(mfaPage==0){
-                masterRowAny(c,126,"Ladedruck Ist","bar","VAG_BoostActualRel","Saugrohrdruck rel.");
-                masterRowAny(c,158,"Ladedruck Soll","bar","VAG_BoostTargetRel");
-                masterRowAny(c,190,"Motorlast","%","Motorlast","Absolute Last");
-                masterRowAny(c,222,"Raildruck","bar","VAG_Rail","Kraftstoffdruck");
-                masterRowAny(c,254,"Lambda Ist","λ","VAG_LambdaActual","Lambda Ist");
+                masterBoostRow(c,122);
+                masterRowAny(c,166,"Motorlast","%","Motorlast","Absolute Last");
+                masterRowAny(c,188,"Luftmasse","g/s","VAG_MAF");
+                masterRowAny(c,210,"Drosselklappe","%","VAG_ThrottleRel","Drosselklappe");
+                masterRowAny(c,232,"Gaspedalstellung","%","Pedalstellung","Pedalstellung E");
+                masterRowAny(c,254,"Zündwinkel","°","VAG_Ignition","Zündwinkel");
             } else if(mfaPage==1){
                 masterRowAny(c,126,"\u00d6ltemperatur","\u00b0C","VAG_OilTemp");
                 masterRowAny(c,158,"K\u00fchlmittel","\u00b0C","VAG_Coolant","K\u00fchlmittel");
@@ -1506,6 +1507,13 @@ public class MainActivity extends Activity {
         }
         private void masterRow(Canvas c,float y,String label,String key,String unit){ line(c,Color.rgb(40,45,51),1,340,y+14,684,y+14); txt(c,label,346,y,13,MUTED,Paint.Align.LEFT,false); txt(c,val(key,unit),678,y,15,TEXT,Paint.Align.RIGHT,true); }
         private void masterRowAny(Canvas c,float y,String label,String unit,String... keys){ line(c,Color.rgb(40,45,51),1,340,y+14,684,y+14); txt(c,label,346,y,13,MUTED,Paint.Align.LEFT,false); txt(c,valAny(unit,keys),678,y,15,TEXT,Paint.Align.RIGHT,true); }
+        private void masterBoostRow(Canvas c,float y){
+            line(c,Color.rgb(40,45,51),1,340,y+31,684,y+31);
+            txt(c,"Ladedruck",346,y,13,MUTED,Paint.Align.LEFT,false);
+            txt(c,valAny("bar","VAG_BoostActualRel"),678,y,18,TEXT,Paint.Align.RIGHT,true);
+            txt(c,"Soll",346,y+18,11,MUTED,Paint.Align.LEFT,false);
+            txt(c,valAny("bar","VAG_BoostTargetRel"),678,y+18,12,MUTED,Paint.Align.RIGHT,false);
+        }
         private void masterNav(Canvas c,float l,float r,String label,boolean active){ round(c,active?Color.rgb(28,7,9):Color.rgb(7,10,13),l+4,527,r-4,596,7); strokeRound(c,active?RED:Color.rgb(42,47,53),l+4,527,r-4,596,7,active?2:1); txt(c,label,(l+r)/2,568,17,active?TEXT:Color.rgb(205,209,214),Paint.Align.CENTER,true); }
         @Override public boolean onTouchEvent(android.view.MotionEvent e){
             float x=e.getX()/sx,y=e.getY()/sy; if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){touchDownX=x;return true;} if(e.getAction()!=android.view.MotionEvent.ACTION_UP)return true;
