@@ -757,12 +757,13 @@ public class MainActivity extends Activity {
     private void startAutoUploadLoop() {
         if (autoUploadRunning) return;
         autoUploadRunning=true;
+        lastAutoUploadAt=System.currentTimeMillis();
         netIo.execute(() -> {
             while (autoUploadRunning) {
                 try {
                     long now=System.currentTimeMillis();
                     if (hasInternet() && now-lastAutoUploadAt>=AUTO_UPLOAD_INTERVAL_MS) {
-                        uploadCurrentLog(true);
+                        uploadCurrentLog(false);
                         lastAutoUploadAt=now;
                     }
                     Thread.sleep(5000);
@@ -775,7 +776,7 @@ public class MainActivity extends Activity {
     private void autoSendRadioAuditOnce() {
         try {
             if (!hasInternet()) return;
-            Thread.sleep(2500);
+            Thread.sleep(8000);
             runRadioSystemScanAndSend();
         } catch (Exception ignored) {}
     }
@@ -835,7 +836,7 @@ public class MainActivity extends Activity {
                     appendSystemLog("CONNECTED_VAG", target.getName());
                     setConnectionState("VAG: verbunden", OK);
                     postStatus("CAVC via VAG TP2.0/KWP2000 verbunden. VCDS-Messwertbloecke werden live gelesen.");
-                    netIo.execute(() -> uploadCurrentLogInternal(true));
+                    appendSystemLog("UPLOAD_PENDING", "rolling upload scheduled");
                     pollVagLoop();
                     return;
                 }
@@ -857,7 +858,7 @@ public class MainActivity extends Activity {
                 connectRetryCount = 0;
                 appendSystemLog("CONNECTED_OBD", target.getName());
                 setConnectionState("OBD: verbunden", OK);
-                netIo.execute(() -> uploadCurrentLogInternal(true));
+                appendSystemLog("UPLOAD_PENDING", "rolling upload scheduled");
                 postStatus("Standard-OBD aktiv. VAG-Direktzugriff war mit diesem Adapter nicht verfuegbar.");
                 pollLoop();
             } catch (Exception e) {
@@ -1873,7 +1874,7 @@ public class MainActivity extends Activity {
             c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(10000); c.setReadTimeout(15000);
             c.setRequestProperty("Content-Type", "text/plain; charset=utf-8");
             c.setRequestProperty("X-Touran-Report", type);
-            c.setRequestProperty("X-Touran-Install", getPackageName());
+            c.setRequestProperty("X-Touran-Install", getInstallId());
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(bytes.length);
             try (OutputStream os = c.getOutputStream()) { os.write(bytes); }
