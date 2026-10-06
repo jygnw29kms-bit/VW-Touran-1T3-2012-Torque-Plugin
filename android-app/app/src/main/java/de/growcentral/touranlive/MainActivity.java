@@ -82,7 +82,8 @@ public class MainActivity extends Activity {
     private static final int OK = Color.rgb(75, 190, 120);
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final ExecutorService netIo = Executors.newSingleThreadExecutor();
+    // Network jobs must not share one endless queue: rolling upload, system audit and self-check run independently.
+    private final ExecutorService netIo = Executors.newFixedThreadPool(3);
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     private BluetoothSocket socket;
@@ -172,6 +173,7 @@ public class MainActivity extends Activity {
         requestBtPermission();
         startAutoUploadLoop();
         netIo.execute(this::autoSendRadioAuditOnce);
+        netIo.execute(() -> performSelfCheck(false));
     }
 
     private void buildShell() {
@@ -294,6 +296,10 @@ public class MainActivity extends Activity {
             toast("Logger geleert.");
         }), weight());
         content.addView(row);
+        LinearLayout checkRow = new LinearLayout(this);
+        checkRow.setPadding(0, dp(10), 0, 0);
+        checkRow.addView(actionButton("SYSTEM-/RECHTECHECK", v -> netIo.execute(() -> performSelfCheck(true))), weight());
+        content.addView(checkRow);
     }
 
     private void showDiagnostics() {
@@ -642,6 +648,70 @@ public class MainActivity extends Activity {
             NetworkCapabilities c=cm.getNetworkCapabilities(n);
             return c!=null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
         } catch(Exception e) { return false; }
+    }
+
+    private void performSelfCheck(boolean showDialog) {
+        StringBuilder r = new StringBuilder();
+        boolean internetPerm = getPackageManager().checkPermission(Manifest.permission.INTERNET, getPackageName()) == PackageManager.PERMISSION_GRANTED;
+        boolean btConnect = Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+        boolean btScan = Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED;
+        BluetoothAdapter a = BluetoothAdapter.getDefaultAdapter();
+        boolean btPresent = a != null;
+        boolean btEnabled = false;
+        boolean pairedObd = false;
+        try {
+            btEnabled = a != null && a.isEnabled();
+            if (a != null && btConnect) {
+                for (BluetoothDevice d : a.getBondedDevices()) {
+                    String n = d.getName();
+                    if (n != null) {
+                        String u = n.toUpperCase(Locale.ROOT);
+                        if (u.contains("OBD") || u.contains("ELM327")) { pairedObd = true; break; }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        boolean net = hasInternet();
+        boolean storage = getFilesDir() != null && getFilesDir().canWrite();
+        String server = net ? testUploadEndpoint() : "kein Internet";
+        r.append(internetPerm ? "OK" : "FEHLER").append("  INTERNET-Recht\n");
+        r.append(btPresent ? "OK" : "FEHLER").append("  Bluetooth-Hardware\n");
+        r.append(btEnabled ? "OK" : "FEHLER").append("  Bluetooth eingeschaltet\n");
+        r.append(btConnect ? "OK" : "FEHLER").append("  BLUETOOTH_CONNECT\n");
+        r.append(btScan ? "OK" : "FEHLER").append("  BLUETOOTH_SCAN\n");
+        r.append(pairedObd ? "OK" : "WARNUNG").append("  gekoppelter OBD/ELM327 gefunden\n");
+        r.append(net ? "OK" : "FEHLER").append("  Internet validiert\n");
+        r.append(storage ? "OK" : "FEHLER").append("  App-Speicher beschreibbar\n");
+        r.append("SERVER  ").append(server).append('\n');
+        r.append("Speicher-Hinweis: Für App-internen Speicher und Android-Dateiauswahl ist kein altes WRITE_EXTERNAL_STORAGE-Recht nötig.");
+        appendSystemLog("SELF_CHECK", r.toString().replace('\n','|'));
+        if (showDialog) ui.post(() -> new AlertDialog.Builder(this).setTitle("135er Touran System-/Rechtecheck").setMessage(r.toString()).setPositiveButton("OK", null).show());
+    }
+
+    private String testUploadEndpoint() {
+        HttpURLConnection c = null;
+        try {
+            URL u = new URL(LOG_UPLOAD_URL);
+            c = (HttpURLConnection)u.openConnection();
+            c.setRequestMethod("POST"); c.setDoOutput(true); c.setConnectTimeout(7000); c.setReadTimeout(9000);
+            c.setRequestProperty("Content-Type", "text/plain; charset=utf-8");
+            c.setRequestProperty("X-Touran-Install", getInstallId());
+            c.setRequestProperty("X-Touran-Report", "log");
+            byte[] b = ("TouranLive selfcheck 0.5.7 " + now()).getBytes(StandardCharsets.UTF_8);
+            c.setFixedLengthStreamingMode(b.length);
+            try (OutputStream o = c.getOutputStream()) { o.write(b); }
+            int code = c.getResponseCode();
+            InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
+            String body = "";
+            if (in != null) {
+                byte[] buf = new byte[1024]; int n; StringBuilder s = new StringBuilder();
+                while ((n=in.read(buf)) > 0 && s.length() < 3000) s.append(new String(buf,0,n,StandardCharsets.UTF_8));
+                in.close(); body=s.toString().trim();
+            }
+            return "HTTP " + code + (body.isEmpty()?"":"  " + body);
+        } catch (Exception e) {
+            return "FEHLER " + safe(e.getMessage());
+        } finally { if (c != null) c.disconnect(); }
     }
 
     private void startAutoUploadLoop() {
