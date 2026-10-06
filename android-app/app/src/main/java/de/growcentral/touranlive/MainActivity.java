@@ -341,7 +341,9 @@ public class MainActivity extends Activity {
         content.addView(title("FAHRZEUGPROFIL • PR-AUSSTATTUNG"));
         TextView base = body(VehicleProfile.MODEL + " • Modelljahr " + VehicleProfile.MODEL_YEAR + " • Produktion " + VehicleProfile.PRODUCTION_DATE +
                 "\n" + VehicleProfile.ENGINE_TEXT + " • Getriebe " + VehicleProfile.GEARBOX + " • " + VehicleProfile.DRIVE +
-                "\nVerkaufstyp " + VehicleProfile.SALES_TYPE + " • Lack " + VehicleProfile.COLOR + " • " + VehicleProfile.TRIM);
+                "\nVerkaufstyp " + VehicleProfile.SALES_TYPE + " • Lack " + VehicleProfile.COLOR + " • " + VehicleProfile.TRIM +
+                "\nBatterie " + VehicleProfile.BATTERY + " • Generator " + VehicleProfile.GENERATOR +
+                "\nAb Werk: " + VehicleProfile.FACTORY_RADIO + " • " + VehicleProfile.TYRES);
         base.setPadding(0, dp(6), 0, dp(12));
         content.addView(base);
         ScrollView sv = new ScrollView(this);
@@ -1754,6 +1756,8 @@ public class MainActivity extends Activity {
         r.append("vehicle_profile=").append(VehicleProfile.MODEL).append(" | ").append(VehicleProfile.ENGINE_TEXT).append(" | ").append(VehicleProfile.GEARBOX).append('\n');
         r.append("production_date=").append(VehicleProfile.PRODUCTION_DATE).append('\n');
         r.append("sales_type=").append(VehicleProfile.SALES_TYPE).append('\n');
+        r.append("battery=").append(VehicleProfile.BATTERY).append(" generator=").append(VehicleProfile.GENERATOR).append('\n');
+        r.append("factory_radio=").append(VehicleProfile.FACTORY_RADIO).append('\n');
         r.append("equipment_profile=\n").append(VehicleProfile.compactEquipmentSummary()).append('\n');
 
         r.append("\n## /proc/cpuinfo\n").append(readSmallFile("/proc/cpuinfo", 18000));

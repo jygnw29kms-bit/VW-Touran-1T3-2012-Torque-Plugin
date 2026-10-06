@@ -14,6 +14,10 @@ final class VehicleProfile {
     static final String DRIVE = "Frontantrieb";
     static final String COLOR = "2K / A3T";
     static final String TRIM = "STYLE / Sport-Komfort";
+    static final String BATTERY = "60 Ah / 280 A";
+    static final String GENERATOR = "140 A";
+    static final String FACTORY_RADIO = "RCD 510 MP3, 4 x 20 W, 8 passive Lautsprecher";
+    static final String TYRES = "205/55 R16 94V XL Ganzjahresreifen";
 
     // PR-coded equipment relevant to TouranLive and future CAN/comfort integration.
     static final String[] PRESENT_PR = {
