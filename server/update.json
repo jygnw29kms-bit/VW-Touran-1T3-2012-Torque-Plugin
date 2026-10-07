@@ -1,0 +1,7 @@
+{
+  "versionCode": 22,
+  "versionName": "0.6.0",
+  "apkUrl": "https://www.dezender.de/touran/TouranLive-debug.apk",
+  "sha256": "",
+  "notes": "TouranLive 0.6.0: verbesserte Diagnose-/Debug-Telemetrie, persistente Tageslogs, Offline-Upload-Queue und In-App-Updatefunktion."
+}

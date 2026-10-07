@@ -17,6 +17,10 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs += ['-Xlint:deprecation']
 }
 
+dependencies {
+    implementation 'androidx.core:core:1.15.0'
+}
+
 android.applicationVariants.all { variant ->
     variant.outputs.all { output ->
         outputFileName = "TouranLive-" + variant.versionName + "-" + variant.buildType.name + ".apk"

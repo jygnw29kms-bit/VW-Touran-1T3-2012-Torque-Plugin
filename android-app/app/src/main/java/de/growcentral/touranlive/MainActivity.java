@@ -176,6 +176,7 @@ public class MainActivity extends Activity {
         showVehicle();
         requestBtPermission();
         startAutoUploadLoop();
+        new AppUpdater(this, netIo, this::appendSystemLog).checkAtStartup();
         netIo.execute(this::autoSendRadioAuditOnce);
         netIo.execute(() -> performSelfCheck(false));
     }
