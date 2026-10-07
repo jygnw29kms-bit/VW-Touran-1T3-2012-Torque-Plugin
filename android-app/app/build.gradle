@@ -1,4 +1,4 @@
-plugins { id 'com.android.application' }
+﻿plugins { id 'com.android.application' }
 
 android {
     namespace 'de.growcentral.touranlive'
@@ -8,8 +8,8 @@ android {
         applicationId "de.growcentral.touranlive"
         minSdk 26
         targetSdk 35
-        versionCode 21
-        versionName "0.5.9"
+        versionCode 22
+        versionName "0.6.0"
     }
 }
 
@@ -22,4 +22,5 @@ android.applicationVariants.all { variant ->
         outputFileName = "TouranLive-" + variant.versionName + "-" + variant.buildType.name + ".apk"
     }
 }
+
 

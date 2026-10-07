@@ -111,6 +111,7 @@ public class MainActivity extends Activity {
 
     private final Object logLock = new Object();
     private final StringBuilder csvLog = new StringBuilder();
+    private DebugTelemetry telemetry;
     private int logRows = 0;
     private long logStartedAt = 0L;
 
@@ -168,7 +169,9 @@ public class MainActivity extends Activity {
     };
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
+        telemetry = new DebugTelemetry(this);
         resetLog();
+        appendSystemLog("APP_START", "version=" + appVersionName() + " session=" + telemetry.sessionId());
         buildShell();
         showVehicle();
         requestBtPermission();
@@ -757,18 +760,24 @@ public class MainActivity extends Activity {
     private void startAutoUploadLoop() {
         if (autoUploadRunning) return;
         autoUploadRunning=true;
-        lastAutoUploadAt=System.currentTimeMillis();
+        lastAutoUploadAt=0L;
         netIo.execute(() -> {
             while (autoUploadRunning) {
                 try {
                     long now=System.currentTimeMillis();
-                    if (hasInternet() && now-lastAutoUploadAt>=AUTO_UPLOAD_INTERVAL_MS) {
-                        uploadCurrentLog(false);
-                        lastAutoUploadAt=now;
+                    if (hasInternet()) {
+                        // Retry persisted uploads as soon as connectivity is available.
+                        DebugTelemetry.Result retry = telemetry.flush(LOG_UPLOAD_URL, getInstallId(), appVersionName());
+                        if (retry.sent > 0) appendSystemLog("UPLOAD_RETRY_OK", "sent=" + retry.sent + " pending=" + retry.pending);
+                        // Queue one rolling snapshot per minute.
+                        if (now-lastAutoUploadAt>=AUTO_UPLOAD_INTERVAL_MS) {
+                            uploadCurrentLogInternal(false);
+                            lastAutoUploadAt=now;
+                        }
                     }
-                    Thread.sleep(5000);
+                    Thread.sleep(15000);
                 } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-                catch (Exception ignored) {}
+                catch (Exception e) { appendSystemLog("UPLOAD_LOOP_ERROR", safe(e.getMessage())); }
             }
         });
     }
@@ -1592,53 +1601,30 @@ public class MainActivity extends Activity {
     }
 
     private void appendPidLog(Pid p, String raw, Double value, String state) {
-        synchronized (logLock) {
-            csvLog.append(now()).append(';')
-                    .append(System.currentTimeMillis() - logStartedAt).append(';')
-                    .append(csv(p.cmd)).append(';')
-                    .append(csv(p.label)).append(';')
-                    .append(csv(raw)).append(';')
-                    .append(value == null ? "" : csv(fmt(value))).append(';')
-                    .append(csv(p.unit)).append(';')
-                    .append(csv(state)).append('\n');
-            logRows++;
-        }
+        String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";" + csv(p.cmd) + ";" + csv(p.label) + ";" + csv(raw) + ";" + (value == null ? "" : csv(fmt(value))) + ";" + csv(p.unit) + ";" + csv(state) + "\n";
+        synchronized (logLock) { csvLog.append(line); logRows++; }
+        if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
 
     private void appendRawDiscovery(String cmd, String raw) {
-        synchronized (logLock) {
-            csvLog.append(now()).append(';')
-                    .append(System.currentTimeMillis() - logStartedAt).append(';')
-                    .append(csv(cmd)).append(';')
-                    .append("PID_SUPPORT;")
-                    .append(csv(raw)).append(";;;DISCOVERY\n");
-            logRows++;
-        }
+        String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";" + csv(cmd) + ";PID_SUPPORT;" + csv(raw) + ";;;DISCOVERY\n";
+        synchronized (logLock) { csvLog.append(line); logRows++; }
+        if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
 
     private void appendSystemLog(String state, String detail) {
-        synchronized (logLock) {
-            csvLog.append(now()).append(';')
-                    .append(System.currentTimeMillis() - logStartedAt).append(';')
-                    .append("SYSTEM;;;")
-                    .append(csv(detail)).append(";;;")
-                    .append(csv(state)).append('\n');
-            logRows++;
-        }
+        String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";SYSTEM;;;" + csv(detail) + ";;;" + csv(state) + "\n";
+        synchronized (logLock) { csvLog.append(line); logRows++; }
+        if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
 
     private void logCommand(String cmd, String raw) {
-        synchronized (logLock) {
-            csvLog.append(now()).append(';')
-                    .append(System.currentTimeMillis() - logStartedAt).append(';')
-                    .append(csv(cmd)).append(';')
-                    .append("ELM_INIT;")
-                    .append(csv(raw)).append(";;;INIT\n");
-            logRows++;
-        }
+        String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";" + csv(cmd) + ";ELM_INIT;" + csv(raw) + ";;;INIT\n";
+        synchronized (logLock) { csvLog.append(line); logRows++; }
+        if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
 
@@ -1698,50 +1684,40 @@ public class MainActivity extends Activity {
     }
 
     private void uploadCurrentLogInternal(boolean capabilityReport) {
-        HttpURLConnection con = null;
         try {
             String snapshot;
             synchronized (logLock) { snapshot = csvLog.toString(); }
             String installId = getInstallId();
+            String reportType = capabilityReport ? "capability" : "log";
             StringBuilder report = new StringBuilder();
             report.append("TouranLive\n");
-            report.append("report_type=").append(capabilityReport ? "capability" : "log").append('\n');
+            report.append("report_type=").append(reportType).append('\n');
             report.append("install_id=").append(installId).append('\n');
+            report.append("session_id=").append(telemetry.sessionId()).append('\n');
+            report.append("app_version=").append(appVersionName()).append('\n');
             report.append("vehicle=VW Touran 1T3 2012 CAVC MED17.5.5\n");
             report.append("protocol=").append(protocolName).append('\n');
             report.append("vag_mode=").append(vagMode).append('\n');
+            report.append("socket_connected=").append(socket != null && socket.isConnected()).append('\n');
+            report.append("polling=").append(polling).append('\n');
+            report.append("log_rows=").append(logRows).append('\n');
             report.append("generated=").append(now()).append('\n');
             report.append("--- CSV LOG ---\n").append(snapshot);
 
-            URL url = new URL(LOG_UPLOAD_URL);
-            con = (HttpURLConnection) url.openConnection();
-            con.setConnectTimeout(8000);
-            con.setReadTimeout(12000);
-            con.setRequestMethod("POST");
-            con.setDoOutput(true);
-            con.setRequestProperty("Content-Type", "text/plain; charset=utf-8");
-            con.setRequestProperty("X-Touran-Install", installId);
-            con.setRequestProperty("X-Touran-Report", capabilityReport ? "capability" : "log");
-            byte[] bytes = report.toString().getBytes(StandardCharsets.UTF_8);
-            con.setFixedLengthStreamingMode(bytes.length);
-            try (OutputStream out = con.getOutputStream()) { out.write(bytes); out.flush(); }
-            int code = con.getResponseCode();
-            InputStream in = code >= 200 && code < 300 ? con.getInputStream() : con.getErrorStream();
-            String response = "";
-            if (in != null) {
-                byte[] data = new byte[4096]; int n; StringBuilder sb = new StringBuilder();
-                while ((n = in.read(data)) > 0) sb.append(new String(data,0,n,StandardCharsets.UTF_8));
-                response = sb.toString();
-                in.close();
+            telemetry.queueSnapshot(reportType, report.toString());
+            if (!hasInternet()) {
+                appendSystemLog("SERVER_QUEUE", "offline pending=" + telemetry.pendingCount());
+                return;
             }
-            appendSystemLog("SERVER_UPLOAD", "HTTP " + code + " " + response);
-            if (code >= 200 && code < 300) toast(capabilityReport ? "Adapter-Scan an dezender.de gesendet." : "Log an dezender.de gesendet.");
-            else toast("Server-Upload fehlgeschlagen: HTTP " + code);
+            DebugTelemetry.Result result = telemetry.flush(LOG_UPLOAD_URL, installId, appVersionName());
+            if (result.pending == 0) {
+                appendSystemLog("SERVER_UPLOAD", "sent=" + result.sent + " pending=0 " + result.lastResponse);
+                if (capabilityReport) toast("Adapter-Scan an dezender.de gesendet.");
+            } else {
+                appendSystemLog("SERVER_UPLOAD_PENDING", "sent=" + result.sent + " pending=" + result.pending + " " + result.lastResponse);
+            }
         } catch (Exception e) {
             appendSystemLog("SERVER_UPLOAD_ERROR", safe(e.getMessage()));
-            toast("Server-Upload fehlgeschlagen: " + safe(e.getMessage()));
-        } finally {
-            if (con != null) con.disconnect();
         }
     }
 
@@ -2099,9 +2075,13 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
+        appendSystemLog("APP_STOP", "destroy");
         polling = false;
+        autoUploadRunning = false;
+        try { if (telemetry != null && hasInternet()) telemetry.flush(LOG_UPLOAD_URL, getInstallId(), appVersionName()); } catch (Exception ignored) {}
         closeSocket();
         io.shutdownNow();
+        netIo.shutdownNow();
         super.onDestroy();
     }
 }
