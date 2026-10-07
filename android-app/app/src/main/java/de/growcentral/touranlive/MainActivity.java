@@ -2015,17 +2015,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    @Override protected void onDestroy() {
-        autoUploadRunning = false;
-        polling = false;
-        connecting = false;
-        appendSystemLog("APP_END", "destroy");
-        closeSocket();
-        io.shutdownNow();
-        netIo.shutdownNow();
-        super.onDestroy();
-    }
-
     private void closeSocket() {
         try { if (vag != null) vag.close(); } catch (Exception ignored) {}
         vag = null;
@@ -2160,6 +2149,7 @@ public class MainActivity extends Activity {
     @Override protected void onDestroy() {
         appendSystemLog("APP_STOP", "destroy");
         polling = false;
+        connecting = false;
         autoUploadRunning = false;
         try { if (telemetry != null && hasInternet()) telemetry.flush(LOG_UPLOAD_URL, getInstallId(), appVersionName()); } catch (Exception ignored) {}
         closeSocket();
