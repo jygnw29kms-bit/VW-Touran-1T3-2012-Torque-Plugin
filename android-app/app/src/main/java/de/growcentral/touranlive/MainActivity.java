@@ -1606,7 +1606,7 @@ public class MainActivity extends Activity {
             txt(c,new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date()),1000,41,11,MUTED,Paint.Align.RIGHT,false);
             gauge(c,160,195,145,8000,"Drehzahl",true); gauge(c,864,195,145,240,"Geschwindigkeit",false);
             miniGaugeAny(c,80,365,62,"K\u00fchlmittel","\u00b0C",50,130,"VAG_Coolant","K\u00fchlmittel");
-            miniGaugeAny(c,245,365,62,"\u00d6ltemperatur","\u00b0C",50,150,"VAG_OilTemp");
+            miniGaugeAny(c,245,365,62,"\u00d6ltemperatur","\u00b0C",50,150,"VAG_OilTemp","Öltemperatur");
             miniGaugeAny(c,779,365,62,"Bordspannung","V",10,16,"VAG_Voltage","ECU-Spannung");
             miniGaugeAny(c,944,365,62,"Au\u00dfentemperatur","\u00b0C",-20,50,"Au\u00dfentemperatur");
             round(c,Color.rgb(7,10,14),326,60,698,270,10); strokeRound(c,Color.rgb(45,50,56),326,60,698,270,10,1.5f);
@@ -1619,7 +1619,7 @@ public class MainActivity extends Activity {
                 masterRowAny(c,232,"Gaspedalstellung","%","Pedalstellung","Pedalstellung E");
                 masterRowAny(c,254,"Zündwinkel","°","VAG_Ignition","Zündwinkel");
             } else if(mfaPage==1){
-                masterRowAny(c,126,"\u00d6ltemperatur","\u00b0C","VAG_OilTemp");
+                masterRowAny(c,126,"\u00d6ltemperatur","\u00b0C","VAG_OilTemp","Öltemperatur");
                 masterRowAny(c,158,"K\u00fchlmittel","\u00b0C","VAG_Coolant","K\u00fchlmittel");
                 masterRowAny(c,190,"Ansaugluft","\u00b0C","VAG_IntakeTemp","Ansaugluft");
                 masterRowAny(c,222,"Bordspannung","V","VAG_Voltage","ECU-Spannung");
