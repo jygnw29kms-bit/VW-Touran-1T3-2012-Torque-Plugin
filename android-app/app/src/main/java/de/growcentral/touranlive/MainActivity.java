@@ -90,7 +90,15 @@ public class MainActivity extends Activity {
     private BufferedReader reader;
     private OutputStream writer;
     private volatile boolean polling = false;
+    private volatile boolean connecting = false;
+    private volatile boolean manualDisconnect = false;
     private int connectRetryCount = 0;
+    private volatile long lastGoodPidAt = 0L;
+    private volatile String lastGoodPid = "";
+    private volatile String lastRawResponse = "";
+    private volatile long totalPidOk = 0L;
+    private volatile long totalPidFail = 0L;
+    private volatile int consecutiveTransportErrors = 0;
     private volatile boolean autoUploadRunning = false;
     private long lastAutoUploadAt = 0L;
     private static final long AUTO_UPLOAD_INTERVAL_MS = 60000L;
@@ -112,6 +120,7 @@ public class MainActivity extends Activity {
     private final Object logLock = new Object();
     private final StringBuilder csvLog = new StringBuilder();
     private DebugTelemetry telemetry;
+    private AppUpdater appUpdater;
     private int logRows = 0;
     private long logStartedAt = 0L;
 
@@ -175,10 +184,18 @@ public class MainActivity extends Activity {
         buildShell();
         showVehicle();
         requestBtPermission();
+        ui.postDelayed(this::autoConnectIfReady, 900);
         startAutoUploadLoop();
-        new AppUpdater(this, netIo, this::appendSystemLog).checkAtStartup();
+        appUpdater = new AppUpdater(this, netIo, this::appendSystemLog);
+        appUpdater.checkAtStartup();
         netIo.execute(this::autoSendRadioAuditOnce);
         netIo.execute(() -> performSelfCheck(false));
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (appUpdater != null) appUpdater.resumePendingInstallIfPermitted();
+        if (!manualDisconnect) ui.postDelayed(this::autoConnectIfReady, 400);
     }
 
     private void buildShell() {
@@ -791,18 +808,38 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {}
     }
 
+    private boolean hasBtPermission() {
+        return Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+    }
+
     private void requestBtPermission() {
-        if (Build.VERSION.SDK_INT >= 31 &&
-                checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+        if (!hasBtPermission()) {
             requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN}, REQ_BT);
         }
     }
 
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_BT) {
+            appendSystemLog("BT_PERMISSION", hasBtPermission() ? "granted" : "denied");
+            if (hasBtPermission()) ui.postDelayed(this::autoConnectIfReady, 300);
+            else postStatus("Bluetooth-Berechtigung fehlt; OBD-Verbindung nicht möglich.");
+        }
+    }
+
+    private void autoConnectIfReady() {
+        if (manualDisconnect || polling || connecting || !hasBtPermission()) return;
+        appendSystemLog("AUTO_CONNECT", "start");
+        connect();
+    }
+
     private void connect() {
-        if (polling) {
-            toast("OBD ist bereits verbunden.");
+        if (polling || connecting) {
+            if (polling) toast("OBD ist bereits verbunden.");
             return;
         }
+        manualDisconnect = false;
+        connecting = true;
         setConnectionState("OBD: verbinde …", PANEL_2);
         io.execute(() -> {
             try {
@@ -841,7 +878,9 @@ public class MainActivity extends Activity {
                     vag = candidate;
                     vagMode = true;
                     polling = true;
+                    connecting = false;
                     connectRetryCount = 0;
+                    consecutiveTransportErrors = 0;
                     protocolName = "VAG TP2.0 / KWP2000";
                     appendSystemLog("CONNECTED_VAG", target.getName());
                     setConnectionState("VAG: verbunden", OK);
@@ -865,13 +904,16 @@ public class MainActivity extends Activity {
                 initElm();
                 discoverSupportedPids();
                 polling = true;
+                connecting = false;
                 connectRetryCount = 0;
+                consecutiveTransportErrors = 0;
                 appendSystemLog("CONNECTED_OBD", target.getName());
                 setConnectionState("OBD: verbunden", OK);
                 appendSystemLog("UPLOAD_PENDING", "rolling upload scheduled");
                 postStatus("Standard-OBD aktiv. VAG-Direktzugriff war mit diesem Adapter nicht verfuegbar.");
                 pollLoop();
             } catch (Exception e) {
+                connecting = false;
                 String msg = safe(e.getMessage());
                 appendSystemLog("CONNECT_ERROR", msg);
                 setConnectionState("OBD: getrennt", RED);
@@ -879,7 +921,7 @@ public class MainActivity extends Activity {
                 if (isTransportFailure(msg) && connectRetryCount < 1) {
                     connectRetryCount++;
                     postStatus("Bluetooth-OBD Stream abgebrochen; automatischer Neuaufbau …");
-                    ui.postDelayed(this::connect, 1200);
+                    ui.postDelayed(this::autoConnectIfReady, 1500);
                 } else {
                     postStatus("Verbindung fehlgeschlagen: " + msg);
                 }
@@ -922,7 +964,7 @@ public class MainActivity extends Activity {
         logCommand("ATSP6", sp6);
         if (sp6 == null || sp6.toUpperCase(Locale.ROOT).contains("ERROR") || sp6.contains("?")) logCommand("ATSP0", send("ATSP0"));
         logCommand("ATAT2", send("ATAT2"));
-        logCommand("ATST08", send("ATST08")); // 32 ms base timeout; app still enforces bounded read windows
+        logCommand("ATST0C", send("ATST0C")); // 48 ms ELM base timeout; stabiler fuer ES359/ELM-Klone
         String dp = send("ATDP");
         protocolName = dp == null || dp.trim().isEmpty() ? "unbekannt" : dp.trim();
         logCommand("ATDP", dp);
@@ -940,7 +982,7 @@ public class MainActivity extends Activity {
     }
 
     private void captureConfirmedObdBaseline() {
-        String[] baseline = {"010C","010D","0105","010F","0146","0142","0133","010B","0104","0111","0149","0123","0134","0144","0106","0107","013C","010E"};
+        String[] baseline = {"010C","010D","0105","010F","0142","0133","010B"};
         for (String cmd : baseline) {
             Pid target = null;
             for (Pid p : pids) if (p.cmd.equals(cmd)) { target = p; break; }
@@ -1164,6 +1206,8 @@ public class MainActivity extends Activity {
 
     private void pollPidAdaptive(String cmd, boolean fastLane) {
         if (!polling) return;
+        Boolean advertised = support.get(cmd);
+        if (Boolean.FALSE.equals(advertised)) return;
         long now = SystemClock.elapsedRealtime();
         Long blocked = pidBackoffUntil.get(cmd);
         if (blocked != null && blocked > now) return;
@@ -1177,19 +1221,37 @@ public class MainActivity extends Activity {
             if (value != null) {
                 pidFailures.put(cmd, 0);
                 pidBackoffUntil.remove(cmd);
+                totalPidOk++;
+                consecutiveTransportErrors = 0;
+                lastGoodPidAt = System.currentTimeMillis();
+                lastGoodPid = cmd;
+                lastRawResponse = raw == null ? "" : raw;
                 if (!fastLane || (++fastLogDivider % 12)==0) appendPidLog(target, raw, value, state);
                 updateTile(target.label, fmt(value), target.unit);
             } else {
+                totalPidFail++;
                 int fails = pidFailures.containsKey(cmd) ? pidFailures.get(cmd) + 1 : 1;
                 pidFailures.put(cmd, fails);
                 appendPidLog(target, raw, null, state);
                 if (fails >= 2) pidBackoffUntil.put(cmd, now + Math.min(30000L, 2500L * fails));
             }
         } catch (Exception e) {
+            totalPidFail++;
             int fails = pidFailures.containsKey(cmd) ? pidFailures.get(cmd) + 1 : 1;
             pidFailures.put(cmd, fails);
             pidBackoffUntil.put(cmd, now + Math.min(30000L, 2500L * fails));
-            appendPidLog(target, "", null, "ERROR:" + safe(e.getMessage()));
+            String msg = safe(e.getMessage());
+            appendPidLog(target, "", null, "ERROR:" + msg);
+            if (isTransportFailure(msg)) {
+                consecutiveTransportErrors++;
+                if (consecutiveTransportErrors >= 2) {
+                    appendSystemLog("OBD_STREAM_LOST", "pid=" + cmd + " error=" + msg);
+                    polling = false;
+                    closeSocket();
+                    setConnectionState("OBD: Verbindung verloren", RED);
+                    if (!manualDisconnect) ui.postDelayed(this::autoConnectIfReady, 1500);
+                }
+            }
         }
     }
 
@@ -1198,13 +1260,13 @@ public class MainActivity extends Activity {
     private String sendFast(String cmd) throws Exception {
         writer.write((cmd + "\r").getBytes(StandardCharsets.US_ASCII));
         writer.flush();
-        return readElmResponse(125);
+        return readElmResponse(220);
     }
 
     private String sendLive(String cmd) throws Exception {
         writer.write((cmd + "\r").getBytes(StandardCharsets.US_ASCII));
         writer.flush();
-        return readElmResponse(260);
+        return readElmResponse(500);
     }
 
     private String readElmResponse(long timeoutMs) throws Exception {
@@ -1701,6 +1763,13 @@ public class MainActivity extends Activity {
             report.append("vag_mode=").append(vagMode).append('\n');
             report.append("socket_connected=").append(socket != null && socket.isConnected()).append('\n');
             report.append("polling=").append(polling).append('\n');
+            report.append("connecting=").append(connecting).append('\n');
+            report.append("last_good_pid=").append(lastGoodPid).append('\n');
+            report.append("last_good_pid_at=").append(lastGoodPidAt).append('\n');
+            report.append("pid_ok=").append(totalPidOk).append('\n');
+            report.append("pid_fail=").append(totalPidFail).append('\n');
+            report.append("transport_errors=").append(consecutiveTransportErrors).append('\n');
+            report.append("last_raw=").append(lastRawResponse).append('\n');
             report.append("log_rows=").append(logRows).append('\n');
             report.append("generated=").append(now()).append('\n');
             report.append("--- CSV LOG ---\n").append(snapshot);
@@ -1931,6 +2000,8 @@ public class MainActivity extends Activity {
     }
 
     private void disconnect() {
+        manualDisconnect = true;
+        connecting = false;
         polling = false;
         ui.post(() -> {
             liveValues.clear();
@@ -1942,6 +2013,17 @@ public class MainActivity extends Activity {
             setConnectionState("OBD: getrennt", RED);
             postStatus("OBD getrennt. Der Log bleibt zum Export erhalten.");
         });
+    }
+
+    @Override protected void onDestroy() {
+        autoUploadRunning = false;
+        polling = false;
+        connecting = false;
+        appendSystemLog("APP_END", "destroy");
+        closeSocket();
+        io.shutdownNow();
+        netIo.shutdownNow();
+        super.onDestroy();
     }
 
     private void closeSocket() {

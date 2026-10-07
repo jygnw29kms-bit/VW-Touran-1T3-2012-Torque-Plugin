@@ -3,6 +3,7 @@ package de.growcentral.touranlive;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -18,8 +19,11 @@ import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 
+/** In-app updater for the private TouranLive deployment on dezender.de. */
 public final class AppUpdater {
     private static final String META_URL = "https://www.dezender.de/touran/update.json";
+    private static final String PREF = "touranlive_updater";
+    private static final String PENDING_APK = "pending_apk";
     private final Activity activity;
     private final ExecutorService net;
     private final Logger logger;
@@ -33,12 +37,30 @@ public final class AppUpdater {
     public void checkAtStartup() { net.execute(() -> check(false)); }
     public void checkManual() { net.execute(() -> check(true)); }
 
+    public void resumePendingInstallIfPermitted() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.getPackageManager().canRequestPackageInstalls()) return;
+        SharedPreferences p = activity.getSharedPreferences(PREF, Activity.MODE_PRIVATE);
+        String path = p.getString(PENDING_APK, "");
+        if (path == null || path.isEmpty()) return;
+        File apk = new File(path);
+        if (!apk.isFile() || apk.length() < 1024) {
+            p.edit().remove(PENDING_APK).apply();
+            logger.log("UPDATE_PENDING_MISSING", path);
+            return;
+        }
+        p.edit().remove(PENDING_APK).apply();
+        logger.log("UPDATE_RESUME_INSTALL", apk.getName());
+        install(apk);
+    }
+
     private void check(boolean manual) {
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection)new URL(META_URL).openConnection();
             c.setConnectTimeout(7000); c.setReadTimeout(9000); c.setUseCaches(false);
-            if (c.getResponseCode() != 200) throw new Exception("update.json HTTP " + c.getResponseCode());
+            c.setRequestProperty("Accept", "application/json");
+            int http = c.getResponseCode();
+            if (http != 200) throw new Exception("update.json HTTP " + http);
             String json = readText(c.getInputStream(), 64 * 1024);
             JSONObject o = new JSONObject(json);
             int remoteCode = o.getInt("versionCode");
@@ -71,13 +93,27 @@ public final class AppUpdater {
             File apk = new File(dir, "TouranLive-" + versionName + ".apk");
             c = (HttpURLConnection)new URL(apkUrl).openConnection();
             c.setConnectTimeout(10000); c.setReadTimeout(30000); c.setInstanceFollowRedirects(true);
-            if (c.getResponseCode() < 200 || c.getResponseCode() >= 300) throw new Exception("APK HTTP " + c.getResponseCode());
+            c.setRequestProperty("Accept", "application/vnd.android.package-archive,application/octet-stream,*/*");
+            int http = c.getResponseCode();
+            if (http < 200 || http >= 300) throw new Exception("APK HTTP " + http);
+            long declared = c.getContentLengthLong();
+            if (declared > 150L * 1024L * 1024L) throw new SecurityException("APK unerwartet groß");
             try (InputStream in = c.getInputStream(); FileOutputStream out = new FileOutputStream(apk, false)) {
-                byte[] b = new byte[32768]; int n; while ((n=in.read(b))>0) out.write(b,0,n); out.flush();
+                byte[] b = new byte[32768]; int n; long total=0;
+                while ((n=in.read(b))>0) {
+                    total += n;
+                    if (total > 150L * 1024L * 1024L) throw new SecurityException("APK Download zu groß");
+                    out.write(b,0,n);
+                }
+                out.flush(); try { out.getFD().sync(); } catch (Exception ignored) {}
             }
+            if (apk.length() < 1024) throw new Exception("APK Download ist leer/ungültig");
             if (!expectedSha.isEmpty()) {
                 String actual = sha256(apk);
                 if (!actual.equalsIgnoreCase(expectedSha)) { apk.delete(); throw new SecurityException("SHA-256 stimmt nicht"); }
+                logger.log("UPDATE_SHA256_OK", actual);
+            } else {
+                logger.log("UPDATE_SHA256_MISSING", "Server-Metadaten enthalten noch keine Prüfsumme");
             }
             logger.log("UPDATE_DOWNLOAD_OK", apk.getAbsolutePath() + " bytes=" + apk.length());
             activity.runOnUiThread(() -> requestPermissionOrInstall(apk));
@@ -89,10 +125,11 @@ public final class AppUpdater {
 
     private void requestPermissionOrInstall(File apk) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !activity.getPackageManager().canRequestPackageInstalls()) {
-            logger.log("UPDATE_PERMISSION_REQUIRED", "REQUEST_INSTALL_PACKAGES");
+            activity.getSharedPreferences(PREF, Activity.MODE_PRIVATE).edit().putString(PENDING_APK, apk.getAbsolutePath()).apply();
+            logger.log("UPDATE_PERMISSION_REQUIRED", "REQUEST_INSTALL_PACKAGES pending=" + apk.getName());
             new AlertDialog.Builder(activity)
                     .setTitle("Installation freigeben")
-                    .setMessage("Android muss 135er Touran einmal erlauben, APK-Updates zu installieren. Danach Update erneut starten.")
+                    .setMessage("Android muss 135er Touran einmal erlauben, APK-Updates zu installieren. Nach der Freigabe wird dieses Update automatisch fortgesetzt.")
                     .setPositiveButton("Freigeben", (d,w) -> {
                         Intent i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.getPackageName()));
                         activity.startActivity(i);
@@ -103,12 +140,17 @@ public final class AppUpdater {
     }
 
     private void install(File apk) {
-        Uri uri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", apk);
-        Intent i = new Intent(Intent.ACTION_VIEW);
-        i.setDataAndType(uri, "application/vnd.android.package-archive");
-        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-        logger.log("UPDATE_INSTALLER_OPEN", apk.getName());
-        activity.startActivity(i);
+        try {
+            Uri uri = FileProvider.getUriForFile(activity, activity.getPackageName() + ".fileprovider", apk);
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            logger.log("UPDATE_INSTALLER_OPEN", apk.getName());
+            activity.startActivity(i);
+        } catch (Exception e) {
+            logger.log("UPDATE_INSTALLER_ERROR", e.getClass().getSimpleName() + ": " + String.valueOf(e.getMessage()));
+            toastDialog("Installer konnte nicht geöffnet werden", String.valueOf(e.getMessage()));
+        }
     }
 
     private int localVersionCode() throws Exception {
