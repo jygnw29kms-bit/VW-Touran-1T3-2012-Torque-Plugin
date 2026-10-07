@@ -2,6 +2,6 @@
   "versionCode": 22,
   "versionName": "0.6.0",
   "apkUrl": "https://www.dezender.de/touran/TouranLive-debug.apk",
-  "sha256": "",
-  "notes": "TouranLive 0.6.0: verbesserte Diagnose-/Debug-Telemetrie, persistente Tageslogs, Offline-Upload-Queue und In-App-Updatefunktion."
+  "sha256": "80a2f74ca802c5cdd7b0526466438e8456f99367f439e29f6fd7d9c796488290",
+  "notes": "TouranLive 0.6.0: Auto-Connect und Verbindungs-Recovery, stabileres ELM-Timing, CAVC/VAG-Livewerte, OBD-Oeltemperatur PID 5C mit VAG-Fallback, optimierter Ladedruck, persistente Tageslogs mit Offline-Queue und robuste In-App-Updates."
 }
