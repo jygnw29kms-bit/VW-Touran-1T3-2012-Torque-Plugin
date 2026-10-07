@@ -174,7 +174,8 @@ public class MainActivity extends Activity {
         new Pid("0149","Pedalstellung","%"),
         new Pid("014A","Pedalstellung E","%"),
         new Pid("014C","Drossel Soll","%"),
-        new Pid("0156","Lambda Trim lang B1","%")
+        new Pid("0156","Lambda Trim lang B1","%"),
+        new Pid("015C","Öltemperatur","°C")
     };
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -1053,11 +1054,20 @@ public class MainActivity extends Activity {
         }
     }
 
+    private VagTp20.Block readVagGroupSafeNoThrow(int group) {
+        try { return readVagGroupSafe(group, false); }
+        catch (Exception e) { appendSystemLog("VAG_WARMUP_" + group + "_ERROR", safe(e.getMessage())); return null; }
+    }
+
     private void applyIfPresent(VagTp20.Block b) { if (b != null) applyVagBlock(b); }
 
     private void pollVagLoop() {
+        // Critical gauges first: ambient pressure is required to turn absolute boost into gauge boost.
+        applyIfPresent(readVagGroupSafeNoThrow(113));
+        applyIfPresent(readVagGroupSafeNoThrow(115));
+        applyIfPresent(readVagGroupSafeNoThrow(134));
         // VCDS block 5 contains RPM + engine load + vehicle speed. It is the hard realtime lane.
-        final int[] slowGroups = {113, 134, 210, 106, 31, 32, 20, 90, 91, 93, 15, 16};
+        final int[] slowGroups = {210, 106, 31, 32, 20, 90, 91, 93, 15, 16};
         int slow=0, cycle=0;
         while (polling && vagMode && vag != null && vag.isOpen() && socket != null && socket.isConnected()) {
             try {
@@ -1066,6 +1076,8 @@ public class MainActivity extends Activity {
                 if ((cycle % 3) == 0) applyIfPresent(readVagGroupSafe(115, false));
                 if ((cycle % 8) == 0) applyIfPresent(readVagGroupSafe(4, false));
                 if ((cycle % 10) == 0) applyIfPresent(readVagGroupSafe(3, false));
+                if ((cycle % 18) == 0) applyIfPresent(readVagGroupSafe(134, false));
+                if ((cycle % 60) == 0) applyIfPresent(readVagGroupSafe(113, false));
                 if ((cycle % 12) == 0) applyIfPresent(readVagGroupSafe(slowGroups[slow++ % slowGroups.length], false));
                 if ((cycle % 24) == 0) vag.keepAlive();
             } catch (Exception e) {
@@ -1196,6 +1208,7 @@ public class MainActivity extends Activity {
                 cycle++;
                 if ((cycle % 3) == 0) pollPidAdaptive(medium[mi++ % medium.length], true);
                 if ((cycle % 12) == 0) pollPidAdaptive(slow[si++ % slow.length], false);
+                if ((cycle % 18) == 0) pollPidAdaptive("015C", false);
                 Thread.sleep(2);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -1360,6 +1373,7 @@ public class MainActivity extends Activity {
                 case "0149":
                 case "014A":
                 case "014C": return A * 100.0 / 255.0;
+                case "015C": return A - 40.0;
                 case "010E": return A / 2.0 - 64.0;
                 case "0142": return ((A * 256) + B) / 1000.0;
             }
