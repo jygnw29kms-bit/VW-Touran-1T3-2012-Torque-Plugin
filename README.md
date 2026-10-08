@@ -1,36 +1,46 @@
-# VW Touran 1T3 2012 – Torque / OBD Live Data Plugin
+﻿# 135er Touran – ESP32 CAN Gateway + Android App
 
-Target vehicle:
-- Volkswagen Touran 1T3
-- Model year: 2012
-- HSN/TSN: 0603 / AIH
-- Engine: 1.4 TSI, 103 kW / 140 PS
-- Engine code target: CAVC
-- Fuel: petrol / direct injection
+Zielsystem:
+- Volkswagen Touran 1T3, Modelljahr 2012
+- HSN/TSN 0603 / AIH
+- 1.4 TSI CAVC, 103 kW / 140 PS
+- Erisin Android-Radio
+- Waveshare ESP32-S3-CAN-2CH-U als einzige Fahrzeug-Schnittstelle
 
-This repository provides a practical live-data pack for Torque-compatible OBD adapters plus tools to inventory the vehicle-specific VW/VAG measuring values actually exposed by the ECU.
+## Architektur ab App 0.7.0
 
-## What is included
+Die 135er-Touran-App verwendet keinen ELM327-/ES359-Adapter mehr. Fahrzeugdaten gelangen ausschließlich über das ESP32-S3-CAN-2CH-U in die App.
 
-- Torque extended PID CSV for useful SAE/OBD-II live data.
-- OBD support scanner that queries the ECU before assuming a PID exists.
-- VCDS controller-map importer for cataloguing VW-specific measuring values.
-- Capture folder for real vehicle exports and validation.
-- Documentation for dashboard fields and validation.
+- CAN1: 500 kbit/s, zunächst Listen-Only; Antrieb/Diagnose
+- CAN2: 100 kbit/s, zunächst Listen-Only; Komfort/Infotainment/MFA-Analyse
+- ESP32 -> Erisin: gemeinsames NDJSON-Gateway-Protokoll
+- erster implementierter Transport: Wi-Fi/TCP Port 13569
+- vorgesehen: USB CDC als bevorzugter Festeinbau-Transport, BLE als Fallback
+- Raw-CAN-Logging beider Kanäle
+- Gateway-Health, Fehlerzähler und Watchdog-Grundlage
+- spätere kontrollierte ISO-TP-Diagnose
+- spätere MFA/BAP-Funktionen nach verifizierter Busanalyse
 
-## Important design rule
+Aktives CAN-Senden ist im aktuellen Firmwarestand gesperrt. Der erste Fahrzeugeinsatz erfolgt rein passiv.
 
-No undocumented VW-specific PID is treated as guaranteed. SAE/OBD-II PIDs are standardized, but manufacturer-specific values depend on ECU software, protocol, control module and dataset. The VCDS map workflow is therefore the source of truth for the exact car.
+## Verzeichnisse
 
-## Quick start
+- `android-app/` – 135er-Touran Android-App
+- `esp32-firmware/` – Firmware für ESP32-S3-CAN-2CH-U
+- `docs/ESP32_S3_CAN_2CH_ARCHITECTURE.md` – Systemarchitektur
+- `docs/ESP32_GATEWAY_PROTOCOL.md` – App-/Gateway-Protokoll
+- `captures/` – reale Fahrzeug-/VCDS-/CAN-Logs zur Verifikation
+- `tools/` und `torque/` – historische Analysewerkzeuge; nicht mehr der Laufzeitpfad der App
 
-1. Copy `torque/VW_Touran_1T3_2012_0603_AIH_CAVC.csv` to the Torque extended PID folder or import it through Torque.
-2. Connect the OBD adapter.
-3. Run `python tools/obd_probe.py --port AUTO` on a laptop/Raspberry Pi with python-obd to discover supported standard PIDs.
-4. In VCDS create a controller channel map for address 01-Engine and place the CSV in `captures/`.
-5. Run `python tools/vcds_map_import.py captures/<file>.csv`.
-6. Commit the generated inventory so the repository can be refined against the real ECU.
+## Grundregel für Fahrzeugwerte
 
-## Safety
+Es werden keine Werte simuliert oder erfunden. Ein Dashboardwert wird erst verwendet, wenn seine Quelle für diesen CAVC/Touran durch reale CAN-/Diagnosedaten oder vorhandene VCDS-Messungen verifiziert wurde.
 
-Do not watch live data while driving. Use a passenger or log data for later review.
+## Erster Fahrzeugeinsatz
+
+1. Firmware auf das ESP32-S3-CAN-2CH-U flashen.
+2. CAN zunächst nur im Listen-Only-Modus anschließen.
+3. Mit der 135er-Touran-App verbinden.
+4. Rohdaten-Capture bei Zündung, Leerlauf und gezielten Bedienaktionen erstellen.
+5. CAN-Signale gegen bekannte VCDS-Werte verifizieren.
+6. Erst danach gezielte aktive Diagnose und MFA/BAP-Kommunikation freigeben.

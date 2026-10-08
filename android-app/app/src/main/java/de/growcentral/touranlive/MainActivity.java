@@ -124,6 +124,11 @@ public class MainActivity extends Activity {
 
     private final Object logLock = new Object();
     private final StringBuilder csvLog = new StringBuilder();
+    private final Object rawCanLock = new Object();
+    private final StringBuilder rawCanLog = new StringBuilder();
+    private static final int RAW_CAN_MAX_CHARS = 4 * 1024 * 1024;
+    private volatile long rawCanFrames = 0L;
+    private volatile long rawCanTrimEvents = 0L;
     private DebugTelemetry telemetry;
     private AppUpdater appUpdater;
     private Esp32GatewayClient gateway;
@@ -314,7 +319,7 @@ public class MainActivity extends Activity {
         d.setPadding(0, dp(8), 0, dp(18));
         content.addView(d);
 
-        TextView count = body("Aktuell: " + logRows + " Logzeilen");
+        TextView count = body("Aktuell: " + logRows + " System-/Diagnosezeilen · " + rawCanFrames + " CAN-Frames im Capture");
         count.setTextSize(22);
         count.setTextColor(TEXT);
         content.addView(count);
@@ -701,10 +706,10 @@ public class MainActivity extends Activity {
         boolean storage = getFilesDir() != null && getFilesDir().canWrite();
         String server = internetPerm && net ? testUploadEndpoint() : "kein aktiver Internet-Transport";
         r.append(internetPerm ? "OK" : "FEHLER").append("  INTERNET-Recht\n");
-        r.append(btPresent ? "OK" : "FEHLER").append("  Bluetooth-Hardware\n");
-        r.append(btEnabled ? "OK" : "FEHLER").append("  Bluetooth eingeschaltet\n");
-        r.append(btConnect ? "OK" : "FEHLER").append("  BLUETOOTH_CONNECT\n");
-        r.append(btScan ? "OK" : "FEHLER").append("  BLUETOOTH_SCAN\n");
+        r.append(btPresent ? "INFO" : "INFO").append("  Bluetooth-Hardware (nur optionaler BLE-Fallback)\n");
+        r.append(btEnabled ? "INFO" : "INFO").append("  Bluetooth " + (btEnabled ? "eingeschaltet" : "ausgeschaltet") + " – für Wi-Fi-Gateway nicht erforderlich\n");
+        r.append(btConnect ? "INFO" : "INFO").append("  BLUETOOTH_CONNECT (nur BLE-Fallback)\n");
+        r.append(btScan ? "INFO" : "INFO").append("  BLUETOOTH_SCAN (nur BLE-Fallback)\n");
         r.append(gateway != null && gateway.isConnected() ? "OK" : "INFO").append("  ESP32-S3-CAN-2CH-U Gateway-Verbindung\n");
         r.append(net ? "OK" : "FEHLER").append("  Internet-Transport vorhanden\n");
         r.append(validated ? "OK" : "INFO").append("  Android-Netzwerk validiert (für Erisin nicht erforderlich)\n");
@@ -798,8 +803,7 @@ public class MainActivity extends Activity {
             }
 
             @Override public void onCanFrame(int channel, long timestampUs, long canId, boolean extended, byte[] data) {
-                // Raw CAN frames are intentionally decoded in the dedicated gateway layer.
-                // The Android dashboard only consumes verified high-level values.
+                appendRawCanFrame(channel, timestampUs, canId, extended, data);
             }
 
             @Override public void onValue(String name, double value, String unit, long timestampUs, String source) {
@@ -1676,8 +1680,8 @@ public class MainActivity extends Activity {
             if(masterCar!=null){ RectF dst=new RectF(X(330),Y(286),X(694),Y(455)); p.setAlpha(255); c.drawBitmap(masterCar,null,dst,p); }
             txt(c,"VW Touran 1T3",32,447,17,TEXT,Paint.Align.LEFT,true); txt(c,"CAVC | B-JU 6969",32,466,12,MUTED,Paint.Align.LEFT,false);
             fill(c,Color.rgb(5,8,10),0,470,1024,523); line(c,Color.rgb(48,53,59),1,0,470,1024,470);
-            txt(c,polling?(vagMode?"VAG verbunden":"OBD verbunden"):"OBD getrennt",34,494,15,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"-",34,513,11,MUTED,Paint.Align.LEFT,false);
-            txt(c,"OBD Fallback",270,494,14,TEXT,Paint.Align.LEFT,true); txt(c,vagMode?"bereit":"aktiv",270,513,11,vagMode?MUTED:OK,Paint.Align.LEFT,false);
+            txt(c,polling?"CAN verbunden":"CAN getrennt",34,494,15,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"-",34,513,11,MUTED,Paint.Align.LEFT,false);
+            txt(c,"ESP32 Gateway",270,494,14,TEXT,Paint.Align.LEFT,true); txt(c,"Listen-Only",270,513,11,OK,Paint.Align.LEFT,false);
             txt(c,"Logger",500,494,14,TEXT,Paint.Align.LEFT,true); txt(c,logRows+" Zeilen",500,513,11,MUTED,Paint.Align.LEFT,false);
             int dc="Keine Fehler gemeldet".equals(dtcStatus)?OK:MUTED; txt(c,"DTC",735,494,14,TEXT,Paint.Align.LEFT,true); txt(c,dtcStatus,735,513,11,dc,Paint.Align.LEFT,false);
             masterNav(c,0,170,"Tacho",true); masterNav(c,171,340,"Live",false); masterNav(c,341,510,"Diagnose",false); masterNav(c,511,680,"Logger",false); masterNav(c,681,850,"Apps",false); masterNav(c,851,1024,"VCDS",false);
@@ -1700,6 +1704,33 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void appendRawCanFrame(int channel, long timestampUs, long canId, boolean extended, byte[] data) {
+        StringBuilder hex = new StringBuilder(16);
+        if (data != null) for (byte b : data) hex.append(String.format(Locale.ROOT, "%02X", b & 0xFF));
+        String line = timestampUs + ";CH" + channel + ";0x" + Long.toHexString(canId).toUpperCase(Locale.ROOT) + ";" +
+                (extended ? "EXT" : "STD") + ";" + hex + "\n";
+        synchronized (rawCanLock) {
+            if (rawCanLog.length() + line.length() > RAW_CAN_MAX_CHARS) {
+                int cut = rawCanLog.indexOf("\n", RAW_CAN_MAX_CHARS / 4);
+                if (cut > 0) rawCanLog.delete(0, cut + 1);
+                else rawCanLog.setLength(0);
+                rawCanTrimEvents++;
+            }
+            rawCanLog.append(line);
+            rawCanFrames++;
+        }
+        if ((rawCanFrames % 500L) == 0L) updateLogBadge();
+    }
+
+    private String buildExportSnapshot() {
+        String normal;
+        String raw;
+        synchronized (logLock) { normal = csvLog.toString(); }
+        synchronized (rawCanLock) { raw = rawCanLog.toString(); }
+        return normal + "\n--- RAW CAN NDJSON-DECODED CSV ---\n" +
+                "gateway_ts_us;channel;can_id;frame_type;data_hex\n" + raw;
+    }
+
     private void resetLog() {
         synchronized (logLock) {
             csvLog.setLength(0);
@@ -1708,6 +1739,11 @@ public class MainActivity extends Activity {
             csvLog.append("timestamp;elapsed_ms;pid;label;raw_response;decoded_value;unit;status\n");
             logRows = 0;
             logStartedAt = System.currentTimeMillis();
+        }
+        synchronized (rawCanLock) {
+            rawCanLog.setLength(0);
+            rawCanFrames = 0L;
+            rawCanTrimEvents = 0L;
         }
         updateLogBadge();
     }
@@ -1809,16 +1845,14 @@ public class MainActivity extends Activity {
             report.append("app_version=").append(appVersionName()).append('\n');
             report.append("vehicle=VW Touran 1T3 2012 CAVC MED17.5.5\n");
             report.append("protocol=").append(protocolName).append('\n');
-            report.append("vag_mode=").append(vagMode).append('\n');
-            report.append("socket_connected=").append(socket != null && socket.isConnected()).append('\n');
+            report.append("gateway_board=ESP32-S3-CAN-2CH-U\n");
+            report.append("gateway_connected=").append(gateway != null && gateway.isConnected()).append('\n');
+            report.append("gateway_transport=wifi-tcp\n");
+            report.append("gateway_readonly=true\n");
             report.append("polling=").append(polling).append('\n');
             report.append("connecting=").append(connecting).append('\n');
-            report.append("last_good_pid=").append(lastGoodPid).append('\n');
-            report.append("last_good_pid_at=").append(lastGoodPidAt).append('\n');
-            report.append("pid_ok=").append(totalPidOk).append('\n');
-            report.append("pid_fail=").append(totalPidFail).append('\n');
-            report.append("transport_errors=").append(consecutiveTransportErrors).append('\n');
-            report.append("last_raw=").append(lastRawResponse).append('\n');
+            report.append("raw_can_frames=").append(rawCanFrames).append('\n');
+            report.append("raw_can_trim_events=").append(rawCanTrimEvents).append('\n');
             report.append("log_rows=").append(logRows).append('\n');
             report.append("generated=").append(now()).append('\n');
             report.append("--- CSV LOG ---\n").append(snapshot);
@@ -1831,7 +1865,7 @@ public class MainActivity extends Activity {
             DebugTelemetry.Result result = telemetry.flush(LOG_UPLOAD_URL, installId, appVersionName());
             if (result.pending == 0) {
                 appendSystemLog("SERVER_UPLOAD", "sent=" + result.sent + " pending=0 " + result.lastResponse);
-                if (capabilityReport) toast("Adapter-Scan an dezender.de gesendet.");
+                if (capabilityReport) toast("Gateway-Bericht an dezender.de gesendet.");
             } else {
                 appendSystemLog("SERVER_UPLOAD_PENDING", "sent=" + result.sent + " pending=" + result.pending + " " + result.lastResponse);
             }
@@ -1999,8 +2033,7 @@ public class MainActivity extends Activity {
         File[] dirs = getExternalFilesDirs(null);
         if (dirs == null) return false;
 
-        String snapshot;
-        synchronized (logLock) { snapshot = csvLog.toString(); }
+        String snapshot = buildExportSnapshot();
 
         for (File dir : dirs) {
             if (dir == null) continue;
@@ -2036,8 +2069,7 @@ public class MainActivity extends Activity {
             Uri uri = data.getData();
             io.execute(() -> {
                 try (OutputStream out = getContentResolver().openOutputStream(uri, "w")) {
-                    String snapshot;
-                    synchronized (logLock) { snapshot = csvLog.toString(); }
+                    String snapshot = buildExportSnapshot();
                     out.write(snapshot.getBytes(StandardCharsets.UTF_8));
                     out.flush();
                     toast("Log gespeichert.");
@@ -2089,7 +2121,7 @@ public class MainActivity extends Activity {
 
     private void updateLogBadge() {
         ui.post(() -> {
-            if (loggerBadge != null) loggerBadge.setText("LOG: " + logRows);
+            if (loggerBadge != null) loggerBadge.setText("LOG: " + logRows + " · CAN: " + rawCanFrames);
             if (dashboardView != null) dashboardView.invalidate();
         });
     }
