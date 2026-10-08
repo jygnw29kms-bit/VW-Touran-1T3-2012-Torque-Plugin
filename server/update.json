@@ -1,7 +1,7 @@
 {
-  "versionCode": 22,
-  "versionName": "0.6.0",
+  "versionCode": 23,
+  "versionName": "0.6.1",
   "apkUrl": "https://www.dezender.de/touran/TouranLive-debug.apk",
-  "sha256": "80a2f74ca802c5cdd7b0526466438e8456f99367f439e29f6fd7d9c796488290",
-  "notes": "TouranLive 0.6.0: Auto-Connect und Verbindungs-Recovery, stabileres ELM-Timing, CAVC/VAG-Livewerte, OBD-Oeltemperatur PID 5C mit VAG-Fallback, optimierter Ladedruck, persistente Tageslogs mit Offline-Queue und robuste In-App-Updates."
+  "sha256": "3c702aeca783e20d05fc8460786914f0cc017a286bc31efb1d87cc3c66b256c5",
+  "notes": "TouranLive 0.6.1: dauerhafter Auto-Connect-Supervisor, robuster ES359/ELM327-SPP-Verbindungsaufbau mit mehreren RFCOMM-Fallbacks, automatischer Wiederaufbau bei Verbindungsfehlern, Datenstrom-Watchdog gegen eingefrorene Livewerte, Erkennung leerer/ungültiger ELM-Antworten, bereinigter ELM-Eingangspuffer, stabilere PID-Timeouts und adaptives Sampling, CAVC/VAG-Livewerte, OBD-Oeltemperatur PID 5C mit VAG-Fallback, verbesserte Ladedruck-Initialisierung, persistente Tageslogs mit Offline-Queue, Health-Metriken und robuste In-App-Updates."
 }
