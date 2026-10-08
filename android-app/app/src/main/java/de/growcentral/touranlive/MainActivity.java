@@ -104,6 +104,7 @@ public class MainActivity extends Activity {
     private static final long OBD_STALE_MS = 4500L;
     private static final int MAX_CONNECT_RETRIES = 4;
     private volatile boolean autoUploadRunning = false;
+    private volatile boolean connectionSupervisorRunning = false;
     private long lastAutoUploadAt = 0L;
     private static final long AUTO_UPLOAD_INTERVAL_MS = 60000L;
     private volatile boolean vagMode = false;
@@ -191,6 +192,7 @@ public class MainActivity extends Activity {
         requestBtPermission();
         ui.postDelayed(this::autoConnectIfReady, 900);
         startAutoUploadLoop();
+        startConnectionSupervisor();
         appUpdater = new AppUpdater(this, netIo, this::appendSystemLog);
         appUpdater.checkAtStartup();
         netIo.execute(this::autoSendRadioAuditOnce);
@@ -851,6 +853,21 @@ public class MainActivity extends Activity {
         connect();
     }
 
+    private void startConnectionSupervisor() {
+        if (connectionSupervisorRunning) return;
+        connectionSupervisorRunning = true;
+        ui.post(new Runnable() {
+            @Override public void run() {
+                if (!connectionSupervisorRunning) return;
+                if (!manualDisconnect && hasBtPermission() && !polling && !connecting) {
+                    appendSystemLog("CONNECTION_SUPERVISOR", "reconnect-request");
+                    autoConnectIfReady();
+                }
+                ui.postDelayed(this, 4000L);
+            }
+        });
+    }
+
     private void connect() {
         if (polling || connecting) {
             if (polling) toast("OBD ist bereits verbunden.");
@@ -1010,7 +1027,8 @@ public class MainActivity extends Activity {
     private boolean isTransportFailure(String message) {
         String m = message == null ? "" : message.toLowerCase(Locale.ROOT);
         return m.contains("broken pipe") || m.contains("socket closed") || m.contains("connection reset") ||
-                m.contains("read failed") || m.contains("connection abort") || m.contains("software caused connection abort");
+                m.contains("read failed") || m.contains("connection abort") || m.contains("software caused connection abort") ||
+                m.contains("timeout") || m.contains("no response") || m.contains("spp verbindung fehlgeschlagen");
     }
 
     private void initElm() throws Exception {
@@ -1348,15 +1366,28 @@ public class MainActivity extends Activity {
     private int fastLogDivider = 0;
 
     private String sendFast(String cmd) throws Exception {
+        drainElmInput();
         writer.write((cmd + "\r").getBytes(StandardCharsets.US_ASCII));
         writer.flush();
-        return readElmResponse(220);
+        String r = readElmResponse(320);
+        if (r == null || r.trim().isEmpty()) throw new IOException("ELM timeout/no response");
+        return r;
     }
 
     private String sendLive(String cmd) throws Exception {
+        drainElmInput();
         writer.write((cmd + "\r").getBytes(StandardCharsets.US_ASCII));
         writer.flush();
-        return readElmResponse(500);
+        String r = readElmResponse(700);
+        if (r == null || r.trim().isEmpty()) throw new IOException("ELM timeout/no response");
+        return r;
+    }
+
+    private void drainElmInput() {
+        try {
+            int guard = 0;
+            while (reader != null && reader.ready() && guard++ < 512) reader.read();
+        } catch (Exception ignored) {}
     }
 
     private String readElmResponse(long timeoutMs) throws Exception {
@@ -2247,6 +2278,7 @@ public class MainActivity extends Activity {
         polling = false;
         connecting = false;
         autoUploadRunning = false;
+        connectionSupervisorRunning = false;
         try { if (telemetry != null && hasInternet()) telemetry.flush(LOG_UPLOAD_URL, getInstallId(), appVersionName()); } catch (Exception ignored) {}
         closeSocket();
         io.shutdownNow();
