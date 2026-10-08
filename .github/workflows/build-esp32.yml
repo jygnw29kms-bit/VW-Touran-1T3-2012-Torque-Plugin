@@ -1,0 +1,35 @@
+name: Build ESP32 Gateway
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "esp32-firmware/**"
+      - ".github/workflows/build-esp32.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ESP-IDF 5.5.2
+        uses: espressif/install-esp-idf-action@v1
+        with:
+          version: "v5.5.2"
+      - name: Configure target
+        working-directory: esp32-firmware
+        run: idf.py set-target esp32s3
+      - name: Build firmware
+        working-directory: esp32-firmware
+        run: idf.py build
+      - name: Collect flash artifacts
+        run: |
+          mkdir -p dist/esp32
+          cp esp32-firmware/build/bootloader/bootloader.bin dist/esp32/
+          cp esp32-firmware/build/partition_table/partition-table.bin dist/esp32/
+          cp esp32-firmware/build/*.bin dist/esp32/
+          cp esp32-firmware/build/flasher_args.json dist/esp32/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 135er-Touran-ESP32-S3-CAN-2CH-U
+          path: dist/esp32/

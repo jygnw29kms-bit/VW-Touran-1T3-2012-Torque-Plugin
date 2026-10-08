@@ -126,6 +126,7 @@ public class MainActivity extends Activity {
     private final StringBuilder csvLog = new StringBuilder();
     private DebugTelemetry telemetry;
     private AppUpdater appUpdater;
+    private Esp32GatewayClient gateway;
     private int logRows = 0;
     private long logStartedAt = 0L;
 
@@ -189,7 +190,7 @@ public class MainActivity extends Activity {
         appendSystemLog("APP_START", "version=" + appVersionName() + " session=" + telemetry.sessionId());
         buildShell();
         showVehicle();
-        requestBtPermission();
+        initEsp32Gateway();
         ui.postDelayed(this::autoConnectIfReady, 900);
         startAutoUploadLoop();
         startConnectionSupervisor();
@@ -222,7 +223,7 @@ public class MainActivity extends Activity {
         brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         top.addView(brand, new LinearLayout.LayoutParams(0, dp(48), 1));
 
-        String initialConnectionText = polling ? (vagMode ? "VAG: verbunden" : "OBD: verbunden") : (connecting ? "OBD: verbinde …" : "OBD: getrennt");
+        String initialConnectionText = polling ? "CAN: verbunden" : (connecting ? "CAN: verbinde …" : "CAN: getrennt");
         int initialConnectionColor = polling ? OK : (connecting ? PANEL_2 : RED);
         connectionBadge = badge(initialConnectionText, initialConnectionColor);
         top.addView(connectionBadge);
@@ -276,14 +277,14 @@ public class MainActivity extends Activity {
         info.addView(sub);
 
         statusLine = body(polling
-                ? ((vagMode ? "VAG" : "OBD") + " verbunden · " + protocolName + " · Live-Daten aktiv")
-                : (connecting ? "OBD-Verbindung wird aufgebaut …" : "Keine Fahrzeugdaten simuliert. Live-Werte erscheinen erst nach bestätigter ECU-Antwort."));
+                ? ("CAN-Gateway verbunden · " + protocolName + " · Live-Daten aktiv")
+                : (connecting ? "CAN-Gateway wird verbunden …" : "Keine Fahrzeugdaten simuliert. Live-Werte erscheinen erst nach bestätigten CAN-/Diagnosedaten."));
         statusLine.setTextColor(MUTED);
         statusLine.setPadding(0, dp(10), 0, dp(14));
         info.addView(statusLine);
 
         LinearLayout connectRow = new LinearLayout(this);
-        connectRow.addView(actionButton("OBD VERBINDEN", v -> connect()), weight());
+        connectRow.addView(actionButton("CAN VERBINDEN", v -> connect()), weight());
         connectRow.addView(actionButton("TRENNEN", v -> disconnect()), weight());
         info.addView(connectRow);
         hero.addView(info, new LinearLayout.LayoutParams(0, -2, 0.58f));
@@ -309,7 +310,7 @@ public class MainActivity extends Activity {
         TextView t = title("DIAGNOSELOGGER");
         content.addView(t);
 
-        TextView d = body("Der Logger speichert ELM327-Initialisierung, Support-Abfragen, rohe ECU-Antworten, dekodierte Werte und Fehlerzustände. Export erfolgt über Androids Dateiauswahl direkt auf internen Speicher oder USB.");
+        TextView d = body("Der Logger speichert Gateway-Status, rohe CAN-Frames beider Kanäle, dekodierte Fahrzeugwerte, Diagnoseantworten und Fehlerzustände. Export erfolgt über Androids Dateiauswahl direkt auf internen Speicher oder USB.");
         d.setPadding(0, dp(8), 0, dp(18));
         content.addView(d);
 
@@ -322,7 +323,10 @@ public class MainActivity extends Activity {
         row.setPadding(0, dp(18), 0, 0);
         row.addView(actionButton("LOG AUF USB", v -> exportLog()), weight());
         row.addView(actionButton("LOG AN SERVER", v -> uploadCurrentLog(false)), weight());
-        row.addView(actionButton("ADAPTER SCAN + SEND", v -> runCapabilityScanAndUpload()), weight());
+        row.addView(actionButton("GATEWAY STATUS", v -> {
+            if (gateway != null && gateway.isConnected()) gateway.requestHealth();
+            else toast("CAN-Gateway ist nicht verbunden.");
+        }), weight());
         row.addView(actionButton("LOG LEEREN", v -> {
             resetLog();
             showLogger();
@@ -347,7 +351,7 @@ public class MainActivity extends Activity {
         head.addView(actionButton("FAHRZEUG / PR", v -> showVehicleProfile()), weight());
         content.addView(head);
 
-        TextView info = body("Liest gespeicherte, schwebende und permanente OBD-Fehler aus dem Motorsteuergerät. Es werden keine Fehler gelöscht und keine Steuergerätewerte verändert.");
+        TextView info = body("Diagnose läuft ausschließlich über das ESP32-S3-CAN-2CH-U. Aktive ISO-TP-Abfragen werden erst nach verifizierter Busanalyse freigeschaltet; Fehlerlöschung und Steuergeräteänderungen bleiben gesperrt.");
         info.setPadding(0, dp(6), 0, dp(12));
         content.addView(info);
 
@@ -420,58 +424,15 @@ public class MainActivity extends Activity {
     }
 
     private void readDiagnostics() {
-        if (socket == null || !socket.isConnected()) {
-            toast("Zuerst OBD verbinden.");
+        if (gateway == null || !gateway.isConnected()) {
+            toast("Zuerst CAN-Gateway verbinden.");
             return;
         }
-
-        dtcStatus = "wird gelesen …";
+        dtcStatus = "ESP32 verbunden · Diagnose-TX bis zum Fahrzeugtest gesperrt";
+        appendSystemLog("DTC_READ_BLOCKED", "gateway readonly; ISO-TP activation pending vehicle validation");
         showDiagnostics();
-
-        polling = false;
-        io.execute(() -> {
-            try {
-                Thread.sleep(120);
-                String rawStored = send("03");
-                String rawPending = send("07");
-                String rawPermanent = send("0A");
-
-                List<String> a = parseDtcResponse(rawStored, "43");
-                List<String> b = parseDtcResponse(rawPending, "47");
-                List<String> c = parseDtcResponse(rawPermanent, "4A");
-
-                synchronized (storedDtcs) {
-                    storedDtcs.clear();
-                    storedDtcs.addAll(a);
-                    pendingDtcs.clear();
-                    pendingDtcs.addAll(b);
-                    permanentDtcs.clear();
-                    permanentDtcs.addAll(c);
-                }
-
-                appendDiagnosticLog("03", rawStored, a);
-                appendDiagnosticLog("07", rawPending, b);
-                appendDiagnosticLog("0A", rawPermanent, c);
-
-                int total = a.size() + b.size() + c.size();
-                dtcStatus = total == 0 ? "Keine Fehler gemeldet" : total + " Fehler/Statusmeldungen gefunden";
-            } catch (Exception e) {
-                dtcStatus = "Fehler beim Auslesen: " + safe(e.getMessage());
-                appendSystemLog("DTC_READ_ERROR", safe(e.getMessage()));
-            }
-
-            ui.post(() -> {
-                showDiagnostics();
-                if (dashboardView != null) dashboardView.invalidate();
-            });
-
-            if (socket != null && socket.isConnected()) {
-                polling = true;
-                pollLoop();
-            }
-        });
+        toast("CAN ist aktuell Listen-Only. DTC-Abfragen werden nach der ersten Busanalyse freigeschaltet.");
     }
-
     private void appendDiagnosticLog(String mode, String raw, List<String> dtcs) {
         synchronized (logLock) {
             csvLog.append(now()).append(';')
@@ -734,19 +695,7 @@ public class MainActivity extends Activity {
         BluetoothAdapter a = BluetoothAdapter.getDefaultAdapter();
         boolean btPresent = a != null;
         boolean btEnabled = false;
-        boolean pairedObd = false;
-        try {
-            btEnabled = a != null && a.isEnabled();
-            if (a != null && btConnect) {
-                for (BluetoothDevice d : a.getBondedDevices()) {
-                    String n = d.getName();
-                    if (n != null) {
-                        String u = n.toUpperCase(Locale.ROOT);
-                        if (u.contains("OBD") || u.contains("ELM327")) { pairedObd = true; break; }
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
+        try { btEnabled = a != null && a.isEnabled(); } catch (Exception ignored) {}
         boolean net = hasInternet();
         boolean validated = isNetworkValidated();
         boolean storage = getFilesDir() != null && getFilesDir().canWrite();
@@ -756,7 +705,7 @@ public class MainActivity extends Activity {
         r.append(btEnabled ? "OK" : "FEHLER").append("  Bluetooth eingeschaltet\n");
         r.append(btConnect ? "OK" : "FEHLER").append("  BLUETOOTH_CONNECT\n");
         r.append(btScan ? "OK" : "FEHLER").append("  BLUETOOTH_SCAN\n");
-        r.append(pairedObd ? "OK" : "WARNUNG").append("  gekoppelter OBD/ELM327 gefunden\n");
+        r.append(gateway != null && gateway.isConnected() ? "OK" : "INFO").append("  ESP32-S3-CAN-2CH-U Gateway-Verbindung\n");
         r.append(net ? "OK" : "FEHLER").append("  Internet-Transport vorhanden\n");
         r.append(validated ? "OK" : "INFO").append("  Android-Netzwerk validiert (für Erisin nicht erforderlich)\n");
         r.append(storage ? "OK" : "FEHLER").append("  App-Speicher beschreibbar\n");
@@ -828,6 +777,69 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {}
     }
 
+    private void initEsp32Gateway() {
+        gateway = new Esp32GatewayClient(new Esp32GatewayClient.Listener() {
+            @Override public void onConnected(String board, String firmware, boolean readOnly) {
+                polling = true;
+                connecting = false;
+                connectRetryCount = 0;
+                protocolName = "ESP32 CAN Gateway";
+                appendSystemLog("ESP32_CONNECTED", board + " fw=" + firmware + " readonly=" + readOnly);
+                setConnectionState("CAN: verbunden", OK);
+                postStatus("ESP32-S3-CAN-2CH-U verbunden · CAN1 500 kbit/s · CAN2 100 kbit/s · " + (readOnly ? "Listen-Only" : "aktiv"));
+            }
+
+            @Override public void onDisconnected(String reason) {
+                polling = false;
+                connecting = false;
+                appendSystemLog("ESP32_DISCONNECTED", safe(reason));
+                setConnectionState("CAN: getrennt", RED);
+                if (!manualDisconnect) postStatus("CAN-Gateway getrennt · automatische Wiederverbindung aktiv.");
+            }
+
+            @Override public void onCanFrame(int channel, long timestampUs, long canId, boolean extended, byte[] data) {
+                // Raw CAN frames are intentionally decoded in the dedicated gateway layer.
+                // The Android dashboard only consumes verified high-level values.
+            }
+
+            @Override public void onValue(String name, double value, String unit, long timestampUs, String source) {
+                if (Double.isNaN(value) || Double.isInfinite(value)) return;
+                String label = gatewayLabel(name);
+                if (label == null) return;
+                updateTile(label, fmt(value), unit == null ? "" : unit);
+            }
+
+            @Override public void onHealth(org.json.JSONObject health) {
+                appendSystemLog("ESP32_HEALTH", health.toString());
+            }
+
+            @Override public void onProtocolError(String line, String reason) {
+                appendSystemLog("ESP32_PROTOCOL", safe(reason) + " line=" + safe(line));
+            }
+        });
+    }
+
+    private String gatewayLabel(String name) {
+        if (name == null) return null;
+        switch (name) {
+            case "rpm": return "Drehzahl";
+            case "speed": return "Geschwindigkeit";
+            case "map": return "Saugrohrdruck";
+            case "boost": return "VAG_BoostActualRel";
+            case "coolant": return "Kühlmittel";
+            case "oil_temp": return "Öltemperatur";
+            case "intake_temp": return "Ansaugluft";
+            case "throttle": return "Drosselklappe";
+            case "pedal": return "Pedalstellung";
+            case "engine_load": return "Motorlast";
+            case "ignition": return "Zündwinkel";
+            case "fuel_pressure": return "Kraftstoffdruck";
+            case "lambda": return "Lambda Ist";
+            case "ecu_voltage": return "ECU-Spannung";
+            default: return null;
+        }
+    }
+
     private boolean hasBtPermission() {
         return Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
     }
@@ -848,8 +860,8 @@ public class MainActivity extends Activity {
     }
 
     private void autoConnectIfReady() {
-        if (manualDisconnect || polling || connecting || !hasBtPermission()) return;
-        appendSystemLog("AUTO_CONNECT", "start");
+        if (manualDisconnect || polling || connecting) return;
+        appendSystemLog("AUTO_CONNECT", "esp32-gateway");
         connect();
     }
 
@@ -859,7 +871,7 @@ public class MainActivity extends Activity {
         ui.post(new Runnable() {
             @Override public void run() {
                 if (!connectionSupervisorRunning) return;
-                if (!manualDisconnect && hasBtPermission() && !polling && !connecting) {
+                if (!manualDisconnect && !polling && !connecting) {
                     appendSystemLog("CONNECTION_SUPERVISOR", "reconnect-request");
                     autoConnectIfReady();
                 }
@@ -870,102 +882,17 @@ public class MainActivity extends Activity {
 
     private void connect() {
         if (polling || connecting) {
-            if (polling) toast("OBD ist bereits verbunden.");
+            if (polling) toast("CAN-Gateway ist bereits verbunden.");
             return;
         }
         manualDisconnect = false;
         connecting = true;
-        setConnectionState("OBD: verbinde …", PANEL_2);
-        io.execute(() -> {
-            try {
-                BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-                if (adapter == null) throw new Exception("Dieses Gerät meldet keinen Bluetooth-Adapter.");
-                if (!adapter.isEnabled()) throw new Exception("Bluetooth ist ausgeschaltet.");
-
-                BluetoothDevice target = null;
-                Set<BluetoothDevice> bonded = adapter.getBondedDevices();
-                for (BluetoothDevice d : bonded) {
-                    String name = d.getName();
-                    if (name == null) continue;
-                    String u = name.toUpperCase(Locale.ROOT);
-                    if (u.equals("OBDII") || u.contains("OBD") || u.contains("ELM327")) {
-                        target = d;
-                        break;
-                    }
-                }
-                if (target == null) throw new Exception("Kein bereits gekoppelter OBD/ELM327-Adapter gefunden.");
-
-                postStatus("Verbinde mit " + target.getName() + " …");
-                openObdTransport(adapter, target);
-
-                // First collect the exact Mode-01 values confirmed by yesterday's VCDS OBD blockmap.
-                // VAG then overrides matching fields; OBD remains the per-field fallback, never a dummy value.
-                try {
-                    initElm();
-                    discoverSupportedPids();
-                    captureConfirmedObdBaseline();
-                } catch (Exception baselineError) {
-                    appendSystemLog("OBD_BASELINE_ERROR", safe(baselineError.getMessage()));
-                }
-
-                VagTp20 candidate = new VagTp20(reader, writer, this::appendSystemLog);
-                if (candidate.openEngine()) {
-                    vag = candidate;
-                    vagMode = true;
-                    polling = true;
-                    connecting = false;
-                    connectRetryCount = 0;
-                    consecutiveTransportErrors = 0;
-                    protocolName = "VAG TP2.0 / KWP2000";
-                    appendSystemLog("CONNECTED_VAG", target.getName());
-                    setConnectionState("VAG: verbunden", OK);
-                    postStatus("CAVC via VAG TP2.0/KWP2000 verbunden. VCDS-Messwertbloecke werden live gelesen.");
-                    appendSystemLog("UPLOAD_PENDING", "rolling upload scheduled");
-                    pollVagLoop();
-                    return;
-                }
-
-                vag = null;
-                vagMode = false;
-                appendSystemLog("VAG_FALLBACK", "TP2.0/KWP2000 nicht verfuegbar; Standard-OBD wird verwendet");
-                try {
-                    send("ATI");
-                } catch (Exception transportError) {
-                    appendSystemLog("OBD_TRANSPORT_RECOVER", safe(transportError.getMessage()));
-                    closeSocket();
-                    Thread.sleep(300);
-                    openObdTransport(adapter, target);
-                }
-                initElm();
-                discoverSupportedPids();
-                polling = true;
-                connecting = false;
-                connectRetryCount = 0;
-                consecutiveTransportErrors = 0;
-                appendSystemLog("CONNECTED_OBD", target.getName());
-                setConnectionState("OBD: verbunden", OK);
-                appendSystemLog("UPLOAD_PENDING", "rolling upload scheduled");
-                postStatus("Standard-OBD aktiv. VAG-Direktzugriff war mit diesem Adapter nicht verfuegbar.");
-                pollLoop();
-            } catch (Exception e) {
-                connecting = false;
-                String msg = safe(e.getMessage());
-                appendSystemLog("CONNECT_ERROR", msg);
-                setConnectionState("OBD: getrennt", RED);
-                closeSocket();
-                if (!manualDisconnect && hasBtPermission() && connectRetryCount < MAX_CONNECT_RETRIES) {
-                    connectRetryCount++;
-                    long delay = 700L + (connectRetryCount * 500L);
-                    appendSystemLog("AUTO_RECONNECT", "attempt=" + connectRetryCount + " delay_ms=" + delay + " reason=" + msg);
-                    postStatus("OBD-Verbindung wird automatisch neu aufgebaut (" + connectRetryCount + "/" + MAX_CONNECT_RETRIES + ") …");
-                    ui.postDelayed(this::autoConnectIfReady, delay);
-                } else {
-                    postStatus("Verbindung fehlgeschlagen: " + msg);
-                }
-            }
-        });
+        setConnectionState("CAN: verbinde …", PANEL_2);
+        postStatus("Verbinde mit ESP32-S3-CAN-2CH-U …");
+        appendSystemLog("ESP32_CONNECT", "wifi " + Esp32GatewayClient.DEFAULT_HOST + ":" + Esp32GatewayClient.DEFAULT_PORT);
+        if (gateway == null) initEsp32Gateway();
+        gateway.connectWifi();
     }
-
     private void openObdTransport(BluetoothAdapter adapter, BluetoothDevice target) throws Exception {
         try { adapter.cancelDiscovery(); } catch (Exception ignored) {}
         BluetoothSocket candidate = null;
@@ -2129,12 +2056,10 @@ public class MainActivity extends Activity {
             liveValues.clear();
             if (dashboardView != null) dashboardView.invalidate();
         });
-        io.execute(() -> {
-            appendSystemLog("DISCONNECTED", "manual");
-            closeSocket();
-            setConnectionState("OBD: getrennt", RED);
-            postStatus("OBD getrennt. Der Log bleibt zum Export erhalten.");
-        });
+        appendSystemLog("DISCONNECTED", "manual esp32-gateway");
+        if (gateway != null) gateway.disconnect();
+        setConnectionState("CAN: getrennt", RED);
+        postStatus("CAN-Gateway getrennt. Der Log bleibt zum Export erhalten.");
     }
 
     private void closeSocket() {
@@ -2154,9 +2079,9 @@ public class MainActivity extends Activity {
                 connectionBadge.setBackgroundColor(color);
             }
             if (statusLine != null) {
-                if (polling) statusLine.setText((vagMode ? "VAG" : "OBD") + " verbunden · " + protocolName + " · Live-Daten aktiv");
-                else if (connecting) statusLine.setText("OBD-Verbindung wird aufgebaut …");
-                else statusLine.setText("OBD getrennt. Keine Fahrzeugdaten werden simuliert.");
+                if (polling) statusLine.setText("CAN-Gateway verbunden · " + protocolName + " · Live-Daten aktiv");
+                else if (connecting) statusLine.setText("CAN-Gateway wird verbunden …");
+                else statusLine.setText("CAN-Gateway getrennt. Keine Fahrzeugdaten werden simuliert.");
             }
             if (dashboardView != null) dashboardView.invalidate();
         });

@@ -17,6 +17,14 @@ static SemaphoreHandle_t s_log_mutex;
 static char *s_can_log[2];
 static size_t s_can_log_len[2];
 
+// Optional application hook. The 135er Touran gateway overrides this weak symbol
+// and streams frames to the Erisin without coupling the board-support layer to TCP.
+__attribute__((weak)) void touran_gateway_can_frame(uint8_t channel, uint32_t can_id,
+                                                    const uint8_t *data, uint8_t len, bool extd)
+{
+    (void)channel; (void)can_id; (void)data; (void)len; (void)extd;
+}
+
 uint8_t ws_bcd_to_dec(uint8_t v)
 {
     return (uint8_t)((v >> 4) * 10 + (v & 0x0F));
@@ -207,6 +215,10 @@ void ws_log_append(uint8_t channel, datetime_t now, uint32_t can_id, const uint8
         log_buf[*log_len] = '\0';
     }
     xSemaphoreGive(s_log_mutex);
+
+    // Never let app transport logic alter the CAN receive path. The hook uses
+    // non-blocking I/O and may drop frames if no client is ready.
+    touran_gateway_can_frame(channel, can_id, data, len, extd);
 }
 
 esp_err_t ws_log_send_json_and_clear(httpd_req_t *req, uint8_t channel)
