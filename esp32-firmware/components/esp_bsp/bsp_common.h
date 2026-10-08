@@ -28,8 +28,9 @@
 #define WS_XL2515_MOSI_GPIO 41
 #define WS_XL2515_MISO_GPIO 42
 
-#define WS_AP_SSID "ESP32-S3-CAN-2CH"
-#define WS_AP_PASS "waveshare"
+#define WS_AP_SSID "135er-Touran-CAN"
+// Bootstrap password only; active CAN transmission is independently firmware-gated.
+#define WS_AP_PASS "135erTouran"
 
 /**
  * @brief Calendar time used by the local RTC and scheduler.
