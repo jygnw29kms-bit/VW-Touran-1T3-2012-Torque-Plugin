@@ -99,6 +99,10 @@ public class MainActivity extends Activity {
     private volatile long totalPidOk = 0L;
     private volatile long totalPidFail = 0L;
     private volatile int consecutiveTransportErrors = 0;
+    private volatile int consecutiveEmptyResponses = 0;
+    private volatile long connectedAt = 0L;
+    private static final long OBD_STALE_MS = 4500L;
+    private static final int MAX_CONNECT_RETRIES = 4;
     private volatile boolean autoUploadRunning = false;
     private long lastAutoUploadAt = 0L;
     private static final long AUTO_UPLOAD_INTERVAL_MS = 60000L;
@@ -216,9 +220,11 @@ public class MainActivity extends Activity {
         brand.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         top.addView(brand, new LinearLayout.LayoutParams(0, dp(48), 1));
 
-        connectionBadge = badge("OBD: getrennt", RED);
+        String initialConnectionText = polling ? (vagMode ? "VAG: verbunden" : "OBD: verbunden") : (connecting ? "OBD: verbinde …" : "OBD: getrennt");
+        int initialConnectionColor = polling ? OK : (connecting ? PANEL_2 : RED);
+        connectionBadge = badge(initialConnectionText, initialConnectionColor);
         top.addView(connectionBadge);
-        loggerBadge = badge("LOG: 0", PANEL_2);
+        loggerBadge = badge("LOG: " + logRows, PANEL_2);
         top.addView(loggerBadge);
         root.addView(top);
 
@@ -267,7 +273,9 @@ public class MainActivity extends Activity {
         sub.setTextSize(18);
         info.addView(sub);
 
-        statusLine = body("Keine Fahrzeugdaten simuliert. Live-Werte erscheinen erst nach bestätigter ECU-Antwort.");
+        statusLine = body(polling
+                ? ((vagMode ? "VAG" : "OBD") + " verbunden · " + protocolName + " · Live-Daten aktiv")
+                : (connecting ? "OBD-Verbindung wird aufgebaut …" : "Keine Fahrzeugdaten simuliert. Live-Werte erscheinen erst nach bestätigter ECU-Antwort."));
         statusLine.setTextColor(MUTED);
         statusLine.setPadding(0, dp(10), 0, dp(14));
         info.addView(statusLine);
@@ -685,14 +693,23 @@ public class MainActivity extends Activity {
         catch (Exception e) { toast("Start fehlgeschlagen: " + e.getMessage()); }
     }
 
+    @SuppressWarnings("deprecation")
     private boolean hasInternet() {
         try {
             ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
             if (cm==null) return false;
             android.net.Network n=cm.getActiveNetwork();
-            if (n==null) return false;
-            NetworkCapabilities c=cm.getNetworkCapabilities(n);
-            return c!=null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+            if (n!=null) {
+                NetworkCapabilities c=cm.getNetworkCapabilities(n);
+                if (c!=null) {
+                    if (c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return true;
+                    if (c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                            c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                            c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) return true;
+                }
+            }
+            android.net.NetworkInfo legacy=cm.getActiveNetworkInfo();
+            return legacy!=null && legacy.isConnected();
         } catch(Exception e) { return false; }
     }
 
@@ -739,7 +756,7 @@ public class MainActivity extends Activity {
         r.append(btScan ? "OK" : "FEHLER").append("  BLUETOOTH_SCAN\n");
         r.append(pairedObd ? "OK" : "WARNUNG").append("  gekoppelter OBD/ELM327 gefunden\n");
         r.append(net ? "OK" : "FEHLER").append("  Internet-Transport vorhanden\n");
-        r.append(validated ? "OK" : "INFO").append("  Android-Netzwerk validiert\n");
+        r.append(validated ? "OK" : "INFO").append("  Android-Netzwerk validiert (für Erisin nicht erforderlich)\n");
         r.append(storage ? "OK" : "FEHLER").append("  App-Speicher beschreibbar\n");
         r.append("INFO  Fahrzeugprofil: ").append(VehicleProfile.MODEL).append(" / ").append(VehicleProfile.ENGINE).append(" / ").append(VehicleProfile.GEARBOX).append("\n");
         r.append("INFO  9Q5 MFA+, 7X5 Parklenkassistent, 9AK Climatronic, 8T2 GRA vorhanden\n");
@@ -919,10 +936,12 @@ public class MainActivity extends Activity {
                 appendSystemLog("CONNECT_ERROR", msg);
                 setConnectionState("OBD: getrennt", RED);
                 closeSocket();
-                if (isTransportFailure(msg) && connectRetryCount < 1) {
+                if (!manualDisconnect && hasBtPermission() && connectRetryCount < MAX_CONNECT_RETRIES) {
                     connectRetryCount++;
-                    postStatus("Bluetooth-OBD Stream abgebrochen; automatischer Neuaufbau …");
-                    ui.postDelayed(this::autoConnectIfReady, 1500);
+                    long delay = 700L + (connectRetryCount * 500L);
+                    appendSystemLog("AUTO_RECONNECT", "attempt=" + connectRetryCount + " delay_ms=" + delay + " reason=" + msg);
+                    postStatus("OBD-Verbindung wird automatisch neu aufgebaut (" + connectRetryCount + "/" + MAX_CONNECT_RETRIES + ") …");
+                    ui.postDelayed(this::autoConnectIfReady, delay);
                 } else {
                     postStatus("Verbindung fehlgeschlagen: " + msg);
                 }
@@ -933,20 +952,59 @@ public class MainActivity extends Activity {
     private void openObdTransport(BluetoothAdapter adapter, BluetoothDevice target) throws Exception {
         try { adapter.cancelDiscovery(); } catch (Exception ignored) {}
         BluetoothSocket candidate = null;
+        Exception last = null;
+
+        // ELM327/ES359 adapters are commonly more reliable with insecure SPP.
         try {
-            candidate = target.createRfcommSocketToServiceRecord(SPP_UUID);
-            candidate.connect();
-            appendSystemLog("BT_SPP_CONNECTED", "secure");
-        } catch (Exception secureError) {
-            try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
-            appendSystemLog("BT_SPP_SECURE_FAIL", safe(secureError.getMessage()));
             candidate = target.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
             candidate.connect();
-            appendSystemLog("BT_SPP_CONNECTED", "insecure-fallback");
+            appendSystemLog("BT_SPP_CONNECTED", "insecure");
+        } catch (Exception insecureError) {
+            last = insecureError;
+            try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
+            candidate = null;
+            appendSystemLog("BT_SPP_INSECURE_FAIL", safe(insecureError.getMessage()));
         }
+
+        if (candidate == null || !candidate.isConnected()) {
+            try {
+                candidate = target.createRfcommSocketToServiceRecord(SPP_UUID);
+                candidate.connect();
+                appendSystemLog("BT_SPP_CONNECTED", "secure-fallback");
+            } catch (Exception secureError) {
+                last = secureError;
+                try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
+                candidate = null;
+                appendSystemLog("BT_SPP_SECURE_FAIL", safe(secureError.getMessage()));
+            }
+        }
+
+        // Last fallback for older Android head units / clone adapters: RFCOMM channel 1.
+        if (candidate == null || !candidate.isConnected()) {
+            try {
+                java.lang.reflect.Method m = target.getClass().getMethod("createRfcommSocket", int.class);
+                candidate = (BluetoothSocket)m.invoke(target, 1);
+                candidate.connect();
+                appendSystemLog("BT_SPP_CONNECTED", "rfcomm-channel-1");
+            } catch (Exception channelError) {
+                last = channelError;
+                try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
+                candidate = null;
+                appendSystemLog("BT_SPP_CHANNEL1_FAIL", safe(channelError.getMessage()));
+            }
+        }
+
+        if (candidate == null || !candidate.isConnected()) {
+            throw new IOException("Bluetooth SPP Verbindung fehlgeschlagen: " + safe(last == null ? "unknown" : last.getMessage()));
+        }
+
         socket = candidate;
         writer = socket.getOutputStream();
         reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+        connectedAt = System.currentTimeMillis();
+        lastGoodPidAt = 0L;
+        consecutiveEmptyResponses = 0;
+        consecutiveTransportErrors = 0;
     }
 
     private boolean isTransportFailure(String message) {
@@ -1236,6 +1294,7 @@ public class MainActivity extends Activity {
                 pidBackoffUntil.remove(cmd);
                 totalPidOk++;
                 consecutiveTransportErrors = 0;
+                consecutiveEmptyResponses = 0;
                 lastGoodPidAt = System.currentTimeMillis();
                 lastGoodPid = cmd;
                 lastRawResponse = raw == null ? "" : raw;
@@ -1247,6 +1306,10 @@ public class MainActivity extends Activity {
                 pidFailures.put(cmd, fails);
                 appendPidLog(target, raw, null, state);
                 if (fails >= 2) pidBackoffUntil.put(cmd, now + Math.min(30000L, 2500L * fails));
+                if ("EMPTY".equals(state) || "UNABLE_TO_CONNECT".equals(state) || "CAN_ERROR".equals(state) || "BUS_ERROR".equals(state)) {
+                    consecutiveEmptyResponses++;
+                    if (shouldRecoverDataStream()) recoverObdStream("no-valid-data state=" + state + " pid=" + cmd);
+                }
             }
         } catch (Exception e) {
             totalPidFail++;
@@ -1257,15 +1320,29 @@ public class MainActivity extends Activity {
             appendPidLog(target, "", null, "ERROR:" + msg);
             if (isTransportFailure(msg)) {
                 consecutiveTransportErrors++;
-                if (consecutiveTransportErrors >= 2) {
-                    appendSystemLog("OBD_STREAM_LOST", "pid=" + cmd + " error=" + msg);
-                    polling = false;
-                    closeSocket();
-                    setConnectionState("OBD: Verbindung verloren", RED);
-                    if (!manualDisconnect) ui.postDelayed(this::autoConnectIfReady, 1500);
+                consecutiveEmptyResponses++;
+                if (consecutiveTransportErrors >= 3 || shouldRecoverDataStream()) {
+                    recoverObdStream("pid=" + cmd + " error=" + msg);
                 }
             }
         }
+    }
+
+    private boolean shouldRecoverDataStream() {
+        long now = System.currentTimeMillis();
+        if (consecutiveEmptyResponses >= 6) return true;
+        if (lastGoodPidAt > 0L && now - lastGoodPidAt > OBD_STALE_MS) return true;
+        return lastGoodPidAt == 0L && connectedAt > 0L && now - connectedAt > 8000L;
+    }
+
+    private void recoverObdStream(String reason) {
+        if (!polling && socket == null) return;
+        appendSystemLog("OBD_STREAM_LOST", reason + " last_good=" + lastGoodPid + " age_ms=" + (lastGoodPidAt == 0L ? -1 : (System.currentTimeMillis() - lastGoodPidAt)));
+        polling = false;
+        connecting = false;
+        closeSocket();
+        setConnectionState("OBD: Datenstrom verloren", RED);
+        if (!manualDisconnect) ui.postDelayed(this::autoConnectIfReady, 800);
     }
 
     private int fastLogDivider = 0;
@@ -2044,6 +2121,11 @@ public class MainActivity extends Activity {
             if (connectionBadge != null) {
                 connectionBadge.setText(text);
                 connectionBadge.setBackgroundColor(color);
+            }
+            if (statusLine != null) {
+                if (polling) statusLine.setText((vagMode ? "VAG" : "OBD") + " verbunden · " + protocolName + " · Live-Daten aktiv");
+                else if (connecting) statusLine.setText("OBD-Verbindung wird aufgebaut …");
+                else statusLine.setText("OBD getrennt. Keine Fahrzeugdaten werden simuliert.");
             }
             if (dashboardView != null) dashboardView.invalidate();
         });
