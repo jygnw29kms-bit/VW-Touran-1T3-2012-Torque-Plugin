@@ -31,7 +31,7 @@ Ein einheitliches NDJSON-Protokoll wird über mehrere Transportwege angeboten:
 2. Wi-Fi TCP – Diagnose/Entwicklung/Fallback
 3. Bluetooth LE – Service/Fallback
 
-Die Nutzdaten sind transportneutral. Die App wählt automatisch den besten verfügbaren Transport.
+Die Nutzdaten sind transportneutral. Aktuell ist ausschließlich Wi-Fi/TCP implementiert. USB CDC, BLE und eine automatische Transportpriorisierung sind Entwicklungsziele. Ein natives USB-Interface am Board bedeutet noch keine implementierte App-Kommunikation.
 
 ## Sicherheitsmodell
 
@@ -108,3 +108,7 @@ Event-basiert
 6. ISO-TP/Diagnose
 7. MFA/BAP-Analyse
 8. gezielte MFA-Ausgabe
+
+## Quellenstand und Boardvarianten
+
+Siehe [Quellenprüfung 09.10.2026](source-audit-2026-10-09.md). Die aktuelle allgemeine Waveshare-Hardwarereferenz nennt 16 MB Flash; das Projekt ist auf 8 MB eingestellt. Die tatsächliche `-U`-Boardvariante muss vor einer Änderung geprüft werden. Pinbelegung und CAN-Bitraten beweisen keine Touran-spezifischen Signaldekoder.

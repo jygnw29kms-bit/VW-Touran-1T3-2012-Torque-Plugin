@@ -29,12 +29,18 @@ public final class DebugTelemetry {
     private final File queueDir;
     private final String sessionId = UUID.randomUUID().toString();
     private final Object lock = new Object();
+    private final Object flushLock = new Object();
+    private static final int MAX_REPORT_BYTES = 5 * 1024 * 1024;
     private final SimpleDateFormat dayFmt = new SimpleDateFormat("yyyy-MM-dd", Locale.GERMANY);
     private final SimpleDateFormat fileDayFmt = new SimpleDateFormat("yyyyMMdd", Locale.GERMANY);
     private final SimpleDateFormat stampFmt = new SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.GERMANY);
 
     public DebugTelemetry(Context context) {
-        root = new File(context.getFilesDir(), "touran-debug");
+        this(new File(context.getFilesDir(), "touran-debug"));
+    }
+
+    DebugTelemetry(File directory) {
+        root = directory;
         queueDir = new File(root, "upload-queue");
         root.mkdirs(); queueDir.mkdirs();
     }
@@ -66,10 +72,14 @@ public final class DebugTelemetry {
             String safeType = clean(reportType == null ? "log" : reportType);
             String stamp = stampFmt.format(new Date());
             File f = new File(queueDir, stamp + "__" + safeType + "__" + sessionId + "__" + UUID.randomUUID() + ".pending");
-            try (FileOutputStream out = new FileOutputStream(f, false)) {
-                out.write(payload.getBytes(StandardCharsets.UTF_8)); out.flush();
+            byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+            if (bytes.length > MAX_REPORT_BYTES) throw new IOException("Report exceeds server limit");
+            File partial = new File(f.getPath() + ".part");
+            try (FileOutputStream out = new FileOutputStream(partial, false)) {
+                out.write(bytes); out.flush();
                 try { out.getFD().sync(); } catch (Exception ignored) {}
             }
+            if (!partial.renameTo(f)) throw new IOException("Could not commit upload queue entry");
             return f;
         }
     }
@@ -80,6 +90,10 @@ public final class DebugTelemetry {
     }
 
     public Result flush(String uploadUrl, String installId, String appVersion) {
+        synchronized (flushLock) { return flushQueue(uploadUrl, installId, appVersion); }
+    }
+
+    private Result flushQueue(String uploadUrl, String installId, String appVersion) {
         int sent = 0; String last = "";
         File[] files = queueDir.listFiles((d,n) -> n.endsWith(".pending"));
         if (files == null) return new Result(0,0,"");
@@ -87,6 +101,7 @@ public final class DebugTelemetry {
         for (File f : files) {
             HttpURLConnection c = null;
             try {
+                if (f.length() > MAX_REPORT_BYTES) throw new IOException("Queued report exceeds server limit");
                 byte[] body = readAll(f);
                 QueueMeta meta = meta(f);
                 URL u = new URL(uploadUrl);
@@ -104,8 +119,11 @@ public final class DebugTelemetry {
                 try (OutputStream os = c.getOutputStream()) { os.write(body); os.flush(); }
                 int code = c.getResponseCode();
                 InputStream in = code >= 200 && code < 300 ? c.getInputStream() : c.getErrorStream();
-                last = "HTTP " + code + " " + readText(in, 4096);
-                if (code >= 200 && code < 300) {
+                String response = readText(in, 4096);
+                last = "HTTP " + code + " " + response;
+                boolean acknowledged = false;
+                try { acknowledged = Boolean.TRUE.equals(new org.json.JSONObject(response).opt("ok")); } catch (Exception ignored) { }
+                if (code >= 200 && code < 300 && acknowledged) {
                     if (!f.delete()) last += " delete_failed=" + f.getName();
                     sent++;
                 } else break;
@@ -119,11 +137,14 @@ public final class DebugTelemetry {
 
     private QueueMeta meta(File f) {
         String n=f.getName();
-        String day=dayFmt.format(new Date());
+        String day;
+        synchronized (lock) { day = dayFmt.format(new Date()); }
         try {
             if (n.length() >= 8) {
-                Date d=fileDayFmt.parse(n.substring(0,8));
-                if (d != null) day=dayFmt.format(d);
+                synchronized (lock) {
+                    Date d = fileDayFmt.parse(n.substring(0,8));
+                    if (d != null) day = dayFmt.format(d);
+                }
             }
         } catch (Exception ignored) {}
         String report="log", session=sessionId;

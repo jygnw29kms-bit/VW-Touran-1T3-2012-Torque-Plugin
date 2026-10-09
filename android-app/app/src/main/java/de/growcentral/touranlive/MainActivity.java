@@ -4,10 +4,15 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ResolveInfo;
+import android.net.Network;
+import android.net.LinkProperties;
+import android.net.RouteInfo;
+import java.net.InetAddress;
+import javax.net.SocketFactory;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.BitmapFactory;
@@ -68,7 +73,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
-    private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
     private static final int REQ_BT = 10;
     private static final int REQ_EXPORT_LOG = 20;
     private static final String LOG_UPLOAD_URL = "https://www.dezender.de/touran/api/upload-log.php";
@@ -117,6 +121,24 @@ public class MainActivity extends Activity {
     private GridLayout liveGrid;
     private DashboardView dashboardView;
     private final Map<String, Double> liveValues = new LinkedHashMap<>();
+    private final Map<String, String> liveUnits = new LinkedHashMap<>();
+    private final SignalFreshness freshness = new SignalFreshness();
+    private final Map<String, GatewayValue> pendingValues = new LinkedHashMap<>();
+    private final Object valueLock = new Object();
+    private boolean valueFlushScheduled;
+    private volatile boolean destroyed;
+    private volatile String gatewayHealth = "Noch kein Gateway-Status empfangen.";
+    private volatile boolean captureRequested = true;
+    private static final class GatewayValue {
+        final String name, unit, source;
+        final double value;
+        final long timestampUs, receivedMs;
+        GatewayValue(String name, double value, String unit, long timestampUs, String source) {
+            this.name = name; this.value = value; this.unit = unit;
+            this.timestampUs = timestampUs; this.source = source;
+            this.receivedMs = SystemClock.elapsedRealtime();
+        }
+    }
     private final List<String> storedDtcs = new ArrayList<>();
     private final List<String> pendingDtcs = new ArrayList<>();
     private final List<String> permanentDtcs = new ArrayList<>();
@@ -124,6 +146,11 @@ public class MainActivity extends Activity {
 
     private final Object logLock = new Object();
     private final StringBuilder csvLog = new StringBuilder();
+    private static final String CSV_HEADER = "timestamp;elapsed_ms;pid;label;raw_response;decoded_value;unit;status\n";
+    private static final int LOG_MAX_CHARS = 1024 * 1024;
+    private long logTrimEvents;
+    private volatile long lastQueuedRawFrames;
+    private volatile String gatewaySession = "not-connected";
     private final Object rawCanLock = new Object();
     private final StringBuilder rawCanLog = new StringBuilder();
     private static final int RAW_CAN_MAX_CHARS = 4 * 1024 * 1024;
@@ -185,8 +212,7 @@ public class MainActivity extends Activity {
         new Pid("0149","Pedalstellung","%"),
         new Pid("014A","Pedalstellung E","%"),
         new Pid("014C","Drossel Soll","%"),
-        new Pid("0156","Lambda Trim lang B1","%"),
-        new Pid("015C","Öltemperatur","°C")
+        new Pid("0156","Lambda Trim lang B1","%")
     };
     @Override public void onCreate(Bundle b) {
         super.onCreate(b);
@@ -201,7 +227,6 @@ public class MainActivity extends Activity {
         startConnectionSupervisor();
         appUpdater = new AppUpdater(this, netIo, this::appendSystemLog);
         appUpdater.checkAtStartup();
-        netIo.execute(this::autoSendRadioAuditOnce);
         netIo.execute(() -> performSelfCheck(false));
     }
 
@@ -246,7 +271,7 @@ public class MainActivity extends Activity {
         nav.setPadding(dp(10), dp(7), dp(10), dp(9));
         nav.setBackgroundColor(Color.rgb(10, 12, 15));
         nav.addView(navButton("TACHO", v -> showVehicle()), weight());
-        nav.addView(navButton("LIVE", v -> showHome()), weight());
+        nav.addView(navButton("LIVE", v -> showLive()), weight());
         nav.addView(navButton("LOGGER", v -> showLogger()), weight());
         nav.addView(navButton("DIAGNOSE", v -> showDiagnostics()), weight());
         nav.addView(navButton("VCDS", v -> showVcds()), weight());
@@ -257,8 +282,34 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
+    private void clearPage() {
+        content.removeAllViews(); liveGrid = null; dashboardView = null;
+    }
+
+    private void showLive() {
+        clearPage();
+        content.addView(title("AKTUELLE FAHRZEUGWERTE"));
+        statusLine = body(polling ? "Gateway verbunden · Werte laufen nach bestätigter Dekodierung ein." : "Gateway getrennt · keine aktuellen Fahrzeugwerte.");
+        content.addView(statusLine);
+        ScrollView scroll = new ScrollView(this);
+        liveGrid = new GridLayout(this); liveGrid.setColumnCount(3);
+        liveGrid.addView(body("Noch keine aktuellen Fahrzeugwerte. Roh-CAN-Captures sind im Logger verfügbar."));
+        scroll.addView(liveGrid);
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        for (Map.Entry<String, Double> entry : new LinkedHashMap<>(liveValues).entrySet()) {
+            if (freshness.isFresh(entry.getKey(), SystemClock.elapsedRealtime())) {
+                updateTile(entry.getKey(), Double.toString(entry.getValue()), liveUnits.get(entry.getKey()));
+            }
+        }
+        LinearLayout row = new LinearLayout(this);
+        row.addView(actionButton("CAN VERBINDEN", v -> connect()), weight());
+        row.addView(actionButton("TRENNEN", v -> disconnect()), weight());
+        row.addView(actionButton("LOGGER", v -> showLogger()), weight());
+        content.addView(row);
+    }
+
     private void showHome() {
-        content.removeAllViews();
+        clearPage();
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.HORIZONTAL);
@@ -311,7 +362,7 @@ public class MainActivity extends Activity {
     }
 
     private void showLogger() {
-        content.removeAllViews();
+        clearPage();
         TextView t = title("DIAGNOSELOGGER");
         content.addView(t);
 
@@ -329,7 +380,11 @@ public class MainActivity extends Activity {
         row.addView(actionButton("LOG AUF USB", v -> exportLog()), weight());
         row.addView(actionButton("LOG AN SERVER", v -> uploadCurrentLog(false)), weight());
         row.addView(actionButton("GATEWAY STATUS", v -> {
-            if (gateway != null && gateway.isConnected()) gateway.requestHealth();
+            if (gateway != null && gateway.isConnected()) {
+                gateway.requestHealth();
+                new AlertDialog.Builder(this).setTitle("Gateway-Status").setMessage(gatewayHealth)
+                        .setPositiveButton("OK", null).show();
+            }
             else toast("CAN-Gateway ist nicht verbunden.");
         }), weight());
         row.addView(actionButton("LOG LEEREN", v -> {
@@ -341,11 +396,24 @@ public class MainActivity extends Activity {
         LinearLayout checkRow = new LinearLayout(this);
         checkRow.setPadding(0, dp(10), 0, 0);
         checkRow.addView(actionButton("SYSTEM-/RECHTECHECK", v -> netIo.execute(() -> performSelfCheck(true))), weight());
+        checkRow.addView(actionButton("CAPTURE START / STOP", v -> {
+            if (gateway == null || !gateway.isConnected()) { toast("Zuerst Gateway verbinden."); return; }
+            captureRequested = !captureRequested;
+            gateway.setCapture(captureRequested);
+            appendSystemLog("CAPTURE_REQUEST", "enable=" + captureRequested);
+            toast(captureRequested ? "Capture-Start angefordert." : "Capture-Pause angefordert.");
+        }), weight());
+        checkRow.addView(actionButton("RADIO SYSTEMSCAN + SEND", v -> new AlertDialog.Builder(this)
+                .setTitle("Radio-Systembericht senden")
+                .setMessage("Geräte-, Software- und Ausstattungsinformationen an dezender.de senden?")
+                .setNegativeButton("Abbrechen", null)
+                .setPositiveButton("Senden", (dialog, which) -> runRadioSystemScanAndSend()).show()), weight());
+        checkRow.addView(actionButton("APP UPDATE", v -> { if (appUpdater != null) appUpdater.checkManual(); }), weight());
         content.addView(checkRow);
     }
 
     private void showDiagnostics() {
-        content.removeAllViews();
+        clearPage();
         dashboardView = null;
 
         LinearLayout head = new LinearLayout(this);
@@ -359,9 +427,10 @@ public class MainActivity extends Activity {
         TextView info = body("Diagnose läuft ausschließlich über das ESP32-S3-CAN-2CH-U. Aktive ISO-TP-Abfragen werden erst nach verifizierter Busanalyse freigeschaltet; Fehlerlöschung und Steuergeräteänderungen bleiben gesperrt.");
         info.setPadding(0, dp(6), 0, dp(12));
         content.addView(info);
+        content.addView(body(gatewayHealth));
 
         TextView state = body("Status: " + dtcStatus);
-        state.setTextColor(storedDtcs.isEmpty() && pendingDtcs.isEmpty() && permanentDtcs.isEmpty() && !"nicht geprüft".equals(dtcStatus) ? OK : TEXT);
+        state.setTextColor(TEXT);
         state.setTextSize(20);
         state.setPadding(0, 0, 0, dp(10));
         content.addView(state);
@@ -379,7 +448,7 @@ public class MainActivity extends Activity {
     }
 
     private void showVehicleProfile() {
-        content.removeAllViews();
+        clearPage();
         content.addView(title("FAHRZEUGPROFIL • PR-AUSSTATTUNG"));
         TextView base = body(VehicleProfile.MODEL + " • Modelljahr " + VehicleProfile.MODEL_YEAR + " • Produktion " + VehicleProfile.PRODUCTION_DATE +
                 "\n" + VehicleProfile.ENGINE_TEXT + " • Getriebe " + VehicleProfile.GEARBOX + " • " + VehicleProfile.DRIVE +
@@ -409,7 +478,7 @@ public class MainActivity extends Activity {
         list.addView(h);
 
         if (items.isEmpty()) {
-            TextView none = body("Keine gemeldeten Fehler.");
+            TextView none = body("Nicht ausgelesen · aktive Diagnose noch gesperrt.");
             none.setTextColor(MUTED);
             none.setPadding(dp(12), dp(8), dp(12), dp(12));
             list.addView(none);
@@ -510,7 +579,7 @@ public class MainActivity extends Activity {
     }
 
     private void showVcds() {
-        content.removeAllViews();
+        clearPage();
         content.addView(title("VCDS • ABGLEICH"));
 
         TextView intro = body("Arbeite die Punkte in dieser Reihenfolge ab. Nichts codieren, keine Anpassungen schreiben und keine Grundeinstellungen starten. Für uns werden ausschließlich Identität, Messwerte und Logs benötigt.");
@@ -553,7 +622,7 @@ public class MainActivity extends Activity {
     }
 
     private void showApps() {
-        content.removeAllViews();
+        clearPage();
         content.addView(title("INSTALLIERTE FAHRZEUG-APPS"));
 
         TextView help = body("Die Liste wird direkt aus den auf diesem Radio installierten, startbaren Apps erzeugt. Es sind keine erfundenen Verknüpfungen hinterlegt.");
@@ -639,14 +708,16 @@ public class MainActivity extends Activity {
     }
 
     private List<Launchable> allLaunchableApps() {
-        List<Launchable> out = new ArrayList<>();
         PackageManager pm = getPackageManager();
-        List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
-        for (ApplicationInfo ai : apps) {
-            if (pm.getLaunchIntentForPackage(ai.packageName) == null) continue;
-            CharSequence label = pm.getApplicationLabel(ai);
-            out.add(new Launchable(label == null ? ai.packageName : label.toString(), ai.packageName));
+        Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        Map<String, Launchable> packages = new LinkedHashMap<>();
+        for (ResolveInfo info : pm.queryIntentActivities(launcher, 0)) {
+            if (info.activityInfo == null || !info.activityInfo.exported) continue;
+            CharSequence label = info.loadLabel(pm);
+            String pkg = info.activityInfo.packageName;
+            packages.put(pkg, new Launchable(label == null ? pkg : label.toString(), pkg));
         }
+        List<Launchable> out = new ArrayList<>(packages.values());
         Collections.sort(out, Comparator.comparing(a -> a.label.toLowerCase(Locale.ROOT)));
         return out;
     }
@@ -661,24 +732,33 @@ public class MainActivity extends Activity {
         catch (Exception e) { toast("Start fehlgeschlagen: " + e.getMessage()); }
     }
 
-    @SuppressWarnings("deprecation")
     private boolean hasInternet() {
         try {
-            ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
-            if (cm==null) return false;
-            android.net.Network n=cm.getActiveNetwork();
-            if (n!=null) {
-                NetworkCapabilities c=cm.getNetworkCapabilities(n);
-                if (c!=null) {
-                    if (c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return true;
-                    if (c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                            c.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                            c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) return true;
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            NetworkCapabilities c = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            // The gateway AP is local-only. A Wi-Fi transport alone does not imply Internet access.
+            return c != null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (SecurityException e) { return false; }
+    }
+
+    private SocketFactory gatewaySocketFactory() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                InetAddress target = InetAddress.getByName(Esp32GatewayClient.DEFAULT_HOST);
+                for (Network network : cm.getAllNetworks()) {
+                    NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+                    LinkProperties links = cm.getLinkProperties(network);
+                    if (caps == null || links == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) continue;
+                    for (RouteInfo route : links.getRoutes()) {
+                        // Require a local subnet route, not a default route to an unrelated Wi-Fi.
+                        if (!route.isDefaultRoute() && route.matches(target)) return network.getSocketFactory();
+                    }
                 }
             }
-            android.net.NetworkInfo legacy=cm.getActiveNetworkInfo();
-            return legacy!=null && legacy.isConnected();
-        } catch(Exception e) { return false; }
+        } catch (Exception e) { appendSystemLog("GATEWAY_NETWORK", safe(e.getMessage())); }
+        return SocketFactory.getDefault();
     }
 
     private boolean isNetworkValidated() {
@@ -700,7 +780,7 @@ public class MainActivity extends Activity {
         BluetoothAdapter a = BluetoothAdapter.getDefaultAdapter();
         boolean btPresent = a != null;
         boolean btEnabled = false;
-        try { btEnabled = a != null && a.isEnabled(); } catch (Exception ignored) {}
+        try { if (btConnect) btEnabled = a != null && a.isEnabled(); } catch (SecurityException ignored) {}
         boolean net = hasInternet();
         boolean validated = isNetworkValidated();
         boolean storage = getFilesDir() != null && getFilesDir().canWrite();
@@ -774,20 +854,17 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void autoSendRadioAuditOnce() {
-        try {
-            if (!hasInternet()) return;
-            Thread.sleep(8000);
-            runRadioSystemScanAndSend();
-        } catch (Exception ignored) {}
-    }
-
     private void initEsp32Gateway() {
         gateway = new Esp32GatewayClient(new Esp32GatewayClient.Listener() {
             @Override public void onConnected(String board, String firmware, boolean readOnly) {
+                if (destroyed) return;
+                synchronized (valueLock) { pendingValues.clear(); }
+                ui.post(MainActivity.this::clearGatewayValues);
                 polling = true;
+                captureRequested = true;
                 connecting = false;
                 connectRetryCount = 0;
+                gatewaySession = UUID.randomUUID().toString();
                 protocolName = "ESP32 CAN Gateway";
                 appendSystemLog("ESP32_CONNECTED", board + " fw=" + firmware + " readonly=" + readOnly);
                 setConnectionState("CAN: verbunden", OK);
@@ -797,29 +874,85 @@ public class MainActivity extends Activity {
             @Override public void onDisconnected(String reason) {
                 polling = false;
                 connecting = false;
+                if (destroyed) return;
+                synchronized (valueLock) { pendingValues.clear(); }
+                ui.post(MainActivity.this::clearGatewayValues);
+                gatewayHealth = "Gateway getrennt.";
                 appendSystemLog("ESP32_DISCONNECTED", safe(reason));
                 setConnectionState("CAN: getrennt", RED);
                 if (!manualDisconnect) postStatus("CAN-Gateway getrennt · automatische Wiederverbindung aktiv.");
             }
 
             @Override public void onCanFrame(int channel, long timestampUs, long canId, boolean extended, byte[] data) {
-                appendRawCanFrame(channel, timestampUs, canId, extended, data);
+                if (!destroyed) appendRawCanFrame(channel, timestampUs, canId, extended, data);
             }
 
             @Override public void onValue(String name, double value, String unit, long timestampUs, String source) {
-                if (Double.isNaN(value) || Double.isInfinite(value)) return;
-                String label = gatewayLabel(name);
-                if (label == null) return;
-                updateTile(label, fmt(value), unit == null ? "" : unit);
+                if (destroyed) return;
+                synchronized (valueLock) {
+                    GatewayValue previous = pendingValues.get(name);
+                    if (previous == null || timestampUs > previous.timestampUs) {
+                        pendingValues.put(name, new GatewayValue(name, value, unit, timestampUs, source));
+                    }
+                    if (!valueFlushScheduled) {
+                        valueFlushScheduled = true;
+                        ui.postDelayed(MainActivity.this::flushGatewayValues, 33);
+                    }
+                }
             }
 
             @Override public void onHealth(org.json.JSONObject health) {
+                if (destroyed) return;
+                gatewayHealth = "Listen-Only · Laufzeit " + health.optLong("uptime_ms") / 1000 + " s" +
+                        "\nCAN1: " + health.optLong("can1_rate") + " kbit/s · RX " + health.optLong("can1_rx") +
+                        "\nCAN2: " + health.optLong("can2_rate") + " kbit/s · RX " + health.optLong("can2_rx") +
+                        "\nVerworfene Gateway-Ausgaben: " + health.optLong("drops");
                 appendSystemLog("ESP32_HEALTH", health.toString());
             }
 
             @Override public void onProtocolError(String line, String reason) {
-                appendSystemLog("ESP32_PROTOCOL", safe(reason) + " line=" + safe(line));
+                if (!destroyed) appendSystemLog("ESP32_PROTOCOL", safe(reason) + " line=" + safe(line));
             }
+        });
+    }
+
+    private void clearGatewayValues() {
+        freshness.clear();
+        liveValues.clear(); liveUnits.clear();
+        minSeen.clear(); maxSeen.clear();
+        if (liveGrid != null) {
+            liveGrid.removeAllViews();
+            liveGrid.addView(body("Noch keine aktuellen, verifizierten Fahrzeugwerte empfangen."));
+        }
+        if (dashboardView != null) dashboardView.invalidate();
+    }
+
+    private void flushGatewayValues() {
+        List<GatewayValue> batch;
+        synchronized (valueLock) {
+            batch = new ArrayList<>(pendingValues.values());
+            pendingValues.clear(); valueFlushScheduled = false;
+        }
+        if (destroyed || !polling) return;
+        List<GatewayValue> accepted = new ArrayList<>();
+        for (GatewayValue v : batch) {
+            String label = gatewayLabel(v.name);
+            if (label == null || !freshness.record(label, v.timestampUs, v.receivedMs)) continue;
+            updateTile(label, Double.toString(v.value), v.unit);
+            accepted.add(v);
+        }
+        if (!accepted.isEmpty()) io.execute(() -> {
+            if (destroyed) return;
+            StringBuilder lines = new StringBuilder();
+            for (GatewayValue v : accepted) {
+                String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";" +
+                        csv("GATEWAY:" + v.name) + ";" + csv(gatewayLabel(v.name)) + ";" +
+                        csv("ts_us=" + v.timestampUs + " source=" + v.source) + ";" +
+                        csv(Double.toString(v.value)) + ";" + csv(v.unit) + ";GATEWAY_VALUE\n";
+                appendMemoryLog(line); lines.append(line);
+            }
+            if (telemetry != null) telemetry.appendCsvLine(lines.toString());
+            updateLogBadge();
         });
     }
 
@@ -859,12 +992,12 @@ public class MainActivity extends Activity {
         if (requestCode == REQ_BT) {
             appendSystemLog("BT_PERMISSION", hasBtPermission() ? "granted" : "denied");
             if (hasBtPermission()) ui.postDelayed(this::autoConnectIfReady, 300);
-            else postStatus("Bluetooth-Berechtigung fehlt; OBD-Verbindung nicht möglich.");
+            else postStatus("Bluetooth-Berechtigung fehlt; Wi-Fi-Gateway bleibt verfügbar.");
         }
     }
 
     private void autoConnectIfReady() {
-        if (manualDisconnect || polling || connecting) return;
+        if (destroyed || manualDisconnect || polling || connecting) return;
         appendSystemLog("AUTO_CONNECT", "esp32-gateway");
         connect();
     }
@@ -874,12 +1007,25 @@ public class MainActivity extends Activity {
         connectionSupervisorRunning = true;
         ui.post(new Runnable() {
             @Override public void run() {
-                if (!connectionSupervisorRunning) return;
+                if (!connectionSupervisorRunning || destroyed) return;
+                long at = SystemClock.elapsedRealtime();
+                List<String> stale = new ArrayList<>();
+                for (String label : liveValues.keySet()) if (!freshness.isFresh(label, at)) stale.add(label);
+                for (String label : stale) {
+                    liveValues.remove(label);
+                    if (liveGrid != null) for (int i = 0; i < liveGrid.getChildCount(); i++) {
+                        View tile = liveGrid.getChildAt(i);
+                        if (label.equals(tile.getTag()) && tile instanceof TextView) {
+                            ((TextView) tile).setText(label + "\n— · veraltet");
+                        }
+                    }
+                }
+                if (!stale.isEmpty() && dashboardView != null) dashboardView.invalidate();
                 if (!manualDisconnect && !polling && !connecting) {
                     appendSystemLog("CONNECTION_SUPERVISOR", "reconnect-request");
                     autoConnectIfReady();
                 }
-                ui.postDelayed(this, 4000L);
+                ui.postDelayed(this, 1000L);
             }
         });
     }
@@ -895,66 +1041,8 @@ public class MainActivity extends Activity {
         postStatus("Verbinde mit ESP32-S3-CAN-2CH-U …");
         appendSystemLog("ESP32_CONNECT", "wifi " + Esp32GatewayClient.DEFAULT_HOST + ":" + Esp32GatewayClient.DEFAULT_PORT);
         if (gateway == null) initEsp32Gateway();
-        gateway.connectWifi();
+        gateway.connectWifi(Esp32GatewayClient.DEFAULT_HOST, Esp32GatewayClient.DEFAULT_PORT, gatewaySocketFactory());
     }
-    private void openObdTransport(BluetoothAdapter adapter, BluetoothDevice target) throws Exception {
-        try { adapter.cancelDiscovery(); } catch (Exception ignored) {}
-        BluetoothSocket candidate = null;
-        Exception last = null;
-
-        // ELM327/ES359 adapters are commonly more reliable with insecure SPP.
-        try {
-            candidate = target.createInsecureRfcommSocketToServiceRecord(SPP_UUID);
-            candidate.connect();
-            appendSystemLog("BT_SPP_CONNECTED", "insecure");
-        } catch (Exception insecureError) {
-            last = insecureError;
-            try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
-            candidate = null;
-            appendSystemLog("BT_SPP_INSECURE_FAIL", safe(insecureError.getMessage()));
-        }
-
-        if (candidate == null || !candidate.isConnected()) {
-            try {
-                candidate = target.createRfcommSocketToServiceRecord(SPP_UUID);
-                candidate.connect();
-                appendSystemLog("BT_SPP_CONNECTED", "secure-fallback");
-            } catch (Exception secureError) {
-                last = secureError;
-                try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
-                candidate = null;
-                appendSystemLog("BT_SPP_SECURE_FAIL", safe(secureError.getMessage()));
-            }
-        }
-
-        // Last fallback for older Android head units / clone adapters: RFCOMM channel 1.
-        if (candidate == null || !candidate.isConnected()) {
-            try {
-                java.lang.reflect.Method m = target.getClass().getMethod("createRfcommSocket", int.class);
-                candidate = (BluetoothSocket)m.invoke(target, 1);
-                candidate.connect();
-                appendSystemLog("BT_SPP_CONNECTED", "rfcomm-channel-1");
-            } catch (Exception channelError) {
-                last = channelError;
-                try { if (candidate != null) candidate.close(); } catch (Exception ignored) {}
-                candidate = null;
-                appendSystemLog("BT_SPP_CHANNEL1_FAIL", safe(channelError.getMessage()));
-            }
-        }
-
-        if (candidate == null || !candidate.isConnected()) {
-            throw new IOException("Bluetooth SPP Verbindung fehlgeschlagen: " + safe(last == null ? "unknown" : last.getMessage()));
-        }
-
-        socket = candidate;
-        writer = socket.getOutputStream();
-        reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
-        connectedAt = System.currentTimeMillis();
-        lastGoodPidAt = 0L;
-        consecutiveEmptyResponses = 0;
-        consecutiveTransportErrors = 0;
-    }
-
     private boolean isTransportFailure(String message) {
         String m = message == null ? "" : message.toLowerCase(Locale.ROOT);
         return m.contains("broken pipe") || m.contains("socket closed") || m.contains("connection reset") ||
@@ -1421,11 +1509,13 @@ public class MainActivity extends Activity {
     }
 
     private void updateTile(String label, String value, String unit) {
-        ui.post(() -> {
+        Runnable update = () -> {
+            if (destroyed) return;
             double numeric;
             try { numeric = Double.parseDouble(value.replace(',', '.')); } catch (Exception ex) { numeric = Double.NaN; }
             if (!Double.isNaN(numeric)) {
                 liveValues.put(label, numeric);
+                liveUnits.put(label, unit == null ? "" : unit);
                 Double map = liveValues.get("Saugrohrdruck");
                 Double baro = liveValues.get("Umgebungsdruck");
                 if (map != null && baro != null) {
@@ -1454,7 +1544,7 @@ public class MainActivity extends Activity {
             if (minSeen.containsKey(label) && maxSeen.containsKey(label)) {
                 range = "\nmin " + fmt(minSeen.get(label)) + "  max " + fmt(maxSeen.get(label));
             }
-            String txt = label + "\n" + value + " " + unit + range;
+            String txt = label + "\n" + (Double.isNaN(numeric) ? value : fmt(numeric)) + " " + unit + range;
             if (found != null) {
                 found.setText(txt);
             } else {
@@ -1472,13 +1562,18 @@ public class MainActivity extends Activity {
                 tile.setBackgroundColor(PANEL);
                 liveGrid.addView(tile, tileParams());
             }
-        });
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) update.run(); else ui.post(update);
     }
 
 
     private class DashboardView extends View {
         private static final float BW = 1024f, BH = 600f;
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final SimpleDateFormat clockFormat = new SimpleDateFormat("HH:mm", Locale.GERMANY);
+        private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY);
+        private final Date drawTime = new Date();
+        private final RectF carBounds = new RectF();
         private final Bitmap masterCar;
         private final Map<String, Double> displayValues = new LinkedHashMap<>();
         private float sx=1f, sy=1f;
@@ -1488,6 +1583,7 @@ public class MainActivity extends Activity {
         private final Runnable animator = new Runnable() {
             @Override public void run() {
                 if (!animatorRunning) return;
+                displayValues.keySet().retainAll(liveValues.keySet());
                 for (Map.Entry<String, Double> e : liveValues.entrySet()) {
                     Double old = displayValues.get(e.getKey());
                     double target = e.getValue();
@@ -1504,7 +1600,7 @@ public class MainActivity extends Activity {
                     }
                 }
                 invalidate();
-                postDelayed(this, 16); // ~60 FPS UI interpolation
+                postDelayed(this, liveValues.isEmpty() ? 1000 : 33); // Idle clock refresh / ~30 FPS when values exist
             }
         };
 
@@ -1523,6 +1619,7 @@ public class MainActivity extends Activity {
         }
 
         private Double v(String key) {
+            if (!polling || !freshness.isFresh(key, SystemClock.elapsedRealtime())) return null;
             Double d = displayValues.get(key);
             return d != null ? d : liveValues.get(key);
         }
@@ -1633,16 +1730,16 @@ public class MainActivity extends Activity {
         }
 
         @Override protected void onDraw(Canvas c){
-            super.onDraw(c); sx=getWidth()/BW; sy=getHeight()/BH;
+            super.onDraw(c); sx=getWidth()/BW; sy=getHeight()/BH; drawTime.setTime(System.currentTimeMillis());
             fill(c,Color.rgb(2,4,7),0,0,1024,600);
             fill(c,Color.rgb(5,8,11),0,0,1024,50); line(c,RED,2,195,49,815,49);
             txt(c,"VW",31,31,16,TEXT,Paint.Align.CENTER,true); txt(c,"135er Touran Live",62,23,21,TEXT,Paint.Align.LEFT,true);
             txt(c,"VW Touran 1T3 | CAVC 1.4 TSI 140 PS",62,42,12,MUTED,Paint.Align.LEFT,false);
             txt(c,"Fahrzeugansicht (MFA) - Seite "+(mfaPage+1)+"/4",512,31,17,TEXT,Paint.Align.CENTER,true);
-            txt(c,polling?(vagMode?"VAG verbunden":"OBD verbunden"):"getrennt",865,22,14,polling?OK:RED,Paint.Align.RIGHT,true);
+            txt(c,polling?"CAN verbunden":"getrennt",865,22,14,polling?OK:RED,Paint.Align.RIGHT,true);
             txt(c,polling?protocolName:"-",865,40,11,MUTED,Paint.Align.RIGHT,false);
-            txt(c,new SimpleDateFormat("HH:mm",Locale.GERMANY).format(new Date()),1000,23,18,TEXT,Paint.Align.RIGHT,true);
-            txt(c,new SimpleDateFormat("dd.MM.yyyy",Locale.GERMANY).format(new Date()),1000,41,11,MUTED,Paint.Align.RIGHT,false);
+            txt(c,clockFormat.format(drawTime),1000,23,18,TEXT,Paint.Align.RIGHT,true);
+            txt(c,dateFormat.format(drawTime),1000,41,11,MUTED,Paint.Align.RIGHT,false);
             gauge(c,160,195,145,8000,"Drehzahl",true); gauge(c,864,195,145,240,"Geschwindigkeit",false);
             miniGaugeAny(c,80,365,62,"K\u00fchlmittel","\u00b0C",50,130,"VAG_Coolant","K\u00fchlmittel");
             miniGaugeAny(c,245,365,62,"\u00d6ltemperatur","\u00b0C",50,150,"VAG_OilTemp","Öltemperatur");
@@ -1677,11 +1774,11 @@ public class MainActivity extends Activity {
                 masterRowAny(c,254,"Drosselklappe","%","Drosselklappe","VAG_ThrottleRel");
             }
             round(c,Color.rgb(5,7,10),305,278,719,463,8);
-            if(masterCar!=null){ RectF dst=new RectF(X(330),Y(286),X(694),Y(455)); p.setAlpha(255); c.drawBitmap(masterCar,null,dst,p); }
+            if(masterCar!=null){ carBounds.set(X(330),Y(286),X(694),Y(455)); p.setAlpha(255); c.drawBitmap(masterCar,null,carBounds,p); }
             txt(c,"VW Touran 1T3",32,447,17,TEXT,Paint.Align.LEFT,true); txt(c,"CAVC | B-JU 6969",32,466,12,MUTED,Paint.Align.LEFT,false);
             fill(c,Color.rgb(5,8,10),0,470,1024,523); line(c,Color.rgb(48,53,59),1,0,470,1024,470);
             txt(c,polling?"CAN verbunden":"CAN getrennt",34,494,15,polling?OK:RED,Paint.Align.LEFT,true); txt(c,polling?protocolName:"-",34,513,11,MUTED,Paint.Align.LEFT,false);
-            txt(c,"ESP32 Gateway",270,494,14,TEXT,Paint.Align.LEFT,true); txt(c,"Listen-Only",270,513,11,OK,Paint.Align.LEFT,false);
+            txt(c,"ESP32 Gateway",270,494,14,TEXT,Paint.Align.LEFT,true); txt(c,polling?"Listen-Only":"nicht verbunden",270,513,11,polling?OK:MUTED,Paint.Align.LEFT,false);
             txt(c,"Logger",500,494,14,TEXT,Paint.Align.LEFT,true); txt(c,logRows+" Zeilen",500,513,11,MUTED,Paint.Align.LEFT,false);
             int dc="Keine Fehler gemeldet".equals(dtcStatus)?OK:MUTED; txt(c,"DTC",735,494,14,TEXT,Paint.Align.LEFT,true); txt(c,dtcStatus,735,513,11,dc,Paint.Align.LEFT,false);
             masterNav(c,0,170,"Tacho",true); masterNav(c,171,340,"Live",false); masterNav(c,341,510,"Diagnose",false); masterNav(c,511,680,"Logger",false); masterNav(c,681,850,"Apps",false); masterNav(c,851,1024,"VCDS",false);
@@ -1696,9 +1793,10 @@ public class MainActivity extends Activity {
             txt(c,valAny("bar","VAG_BoostTargetRel"),678,y+18,12,MUTED,Paint.Align.RIGHT,false);
         }
         private void masterNav(Canvas c,float l,float r,String label,boolean active){ round(c,active?Color.rgb(28,7,9):Color.rgb(7,10,13),l+4,527,r-4,596,7); strokeRound(c,active?RED:Color.rgb(42,47,53),l+4,527,r-4,596,7,active?2:1); txt(c,label,(l+r)/2,568,17,active?TEXT:Color.rgb(205,209,214),Paint.Align.CENTER,true); }
+        @Override public boolean performClick() { super.performClick(); return true; }
         @Override public boolean onTouchEvent(android.view.MotionEvent e){
-            float x=e.getX()/sx,y=e.getY()/sy; if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){touchDownX=x;return true;} if(e.getAction()!=android.view.MotionEvent.ACTION_UP)return true;
-            if(y>=527){ if(x<170){invalidate();return true;} if(x<340){buildShell();showHome();return true;} if(x<510){buildShell();showDiagnostics();return true;} if(x<680){buildShell();showLogger();return true;} if(x<850){buildShell();showApps();return true;} buildShell();showVcds();return true; }
+            float x=e.getX()/sx,y=e.getY()/sy; if(e.getAction()==android.view.MotionEvent.ACTION_DOWN){touchDownX=x;return true;} if(e.getAction()!=android.view.MotionEvent.ACTION_UP)return true; performClick();
+            if(y>=527){ if(x<170){invalidate();return true;} if(x<340){buildShell();showLive();return true;} if(x<510){buildShell();showDiagnostics();return true;} if(x<680){buildShell();showLogger();return true;} if(x<850){buildShell();showApps();return true;} buildShell();showVcds();return true; }
             if(y>=60&&y<=270&&x>=326&&x<=698){ float dx=x-touchDownX; if(Math.abs(dx)>45){mfaPage=(mfaPage+(dx<0?1:3))%4;invalidate();return true;} if(y<110&&x<390){mfaPage=(mfaPage+3)%4;invalidate();return true;} if(y<110&&x>635){mfaPage=(mfaPage+1)%4;invalidate();return true;} }
             if(y>=470&&y<523&&x<220){if(polling)disconnect();else connect();return true;} return true;
         }
@@ -1706,8 +1804,11 @@ public class MainActivity extends Activity {
 
     private void appendRawCanFrame(int channel, long timestampUs, long canId, boolean extended, byte[] data) {
         StringBuilder hex = new StringBuilder(16);
-        if (data != null) for (byte b : data) hex.append(String.format(Locale.ROOT, "%02X", b & 0xFF));
-        String line = timestampUs + ";CH" + channel + ";0x" + Long.toHexString(canId).toUpperCase(Locale.ROOT) + ";" +
+        if (data != null) for (byte b : data) {
+            int unsigned = b & 0xff;
+            hex.append("0123456789ABCDEF".charAt(unsigned >>> 4)).append("0123456789ABCDEF".charAt(unsigned & 15));
+        }
+        String line = gatewaySession + ";" + timestampUs + ";CH" + channel + ";0x" + Long.toHexString(canId).toUpperCase(Locale.ROOT) + ";" +
                 (extended ? "EXT" : "STD") + ";" + hex + "\n";
         synchronized (rawCanLock) {
             if (rawCanLog.length() + line.length() > RAW_CAN_MAX_CHARS) {
@@ -1728,7 +1829,7 @@ public class MainActivity extends Activity {
         synchronized (logLock) { normal = csvLog.toString(); }
         synchronized (rawCanLock) { raw = rawCanLog.toString(); }
         return normal + "\n--- RAW CAN NDJSON-DECODED CSV ---\n" +
-                "gateway_ts_us;channel;can_id;frame_type;data_hex\n" + raw;
+                "gateway_session;gateway_ts_us;channel;can_id;frame_type;data_hex\n" + raw;
     }
 
     private void resetLog() {
@@ -1736,7 +1837,8 @@ public class MainActivity extends Activity {
             csvLog.setLength(0);
             minSeen.clear();
             maxSeen.clear();
-            csvLog.append("timestamp;elapsed_ms;pid;label;raw_response;decoded_value;unit;status\n");
+            csvLog.append(CSV_HEADER);
+            logTrimEvents = 0;
             logRows = 0;
             logStartedAt = System.currentTimeMillis();
         }
@@ -1744,34 +1846,49 @@ public class MainActivity extends Activity {
             rawCanLog.setLength(0);
             rawCanFrames = 0L;
             rawCanTrimEvents = 0L;
+            lastQueuedRawFrames = 0L;
         }
         updateLogBadge();
     }
 
+    private void appendMemoryLog(String line) {
+        synchronized (logLock) {
+            if (csvLog.length() + line.length() > LOG_MAX_CHARS) {
+                int cut = csvLog.indexOf("\n", LOG_MAX_CHARS / 4);
+                if (cut >= 0) csvLog.delete(CSV_HEADER.length(), cut + 1);
+                else { csvLog.setLength(0); csvLog.append(CSV_HEADER); }
+                logTrimEvents++;
+            }
+            csvLog.append(line); logRows++;
+        }
+    }
+
     private void appendPidLog(Pid p, String raw, Double value, String state) {
+        if (destroyed) return;
         String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";" + csv(p.cmd) + ";" + csv(p.label) + ";" + csv(raw) + ";" + (value == null ? "" : csv(fmt(value))) + ";" + csv(p.unit) + ";" + csv(state) + "\n";
-        synchronized (logLock) { csvLog.append(line); logRows++; }
+        appendMemoryLog(line);
         if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
 
     private void appendRawDiscovery(String cmd, String raw) {
         String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";" + csv(cmd) + ";PID_SUPPORT;" + csv(raw) + ";;;DISCOVERY\n";
-        synchronized (logLock) { csvLog.append(line); logRows++; }
+        appendMemoryLog(line);
         if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
 
     private void appendSystemLog(String state, String detail) {
-        String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";SYSTEM;;;" + csv(detail) + ";;;" + csv(state) + "\n";
-        synchronized (logLock) { csvLog.append(line); logRows++; }
+        if (destroyed) return;
+        String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";SYSTEM;" + csv(state) + ";" + csv(detail) + ";;;" + csv(state) + "\n";
+        appendMemoryLog(line);
         if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
 
     private void logCommand(String cmd, String raw) {
         String line = now() + ";" + (System.currentTimeMillis() - logStartedAt) + ";" + csv(cmd) + ";ELM_INIT;" + csv(raw) + ";;;INIT\n";
-        synchronized (logLock) { csvLog.append(line); logRows++; }
+        appendMemoryLog(line);
         if (telemetry != null) telemetry.appendCsvLine(line);
         updateLogBadge();
     }
@@ -1853,11 +1970,26 @@ public class MainActivity extends Activity {
             report.append("connecting=").append(connecting).append('\n');
             report.append("raw_can_frames=").append(rawCanFrames).append('\n');
             report.append("raw_can_trim_events=").append(rawCanTrimEvents).append('\n');
+            report.append("log_trim_events=").append(logTrimEvents).append('\n');
             report.append("log_rows=").append(logRows).append('\n');
             report.append("generated=").append(now()).append('\n');
             report.append("--- CSV LOG ---\n").append(snapshot);
 
             telemetry.queueSnapshot(reportType, report.toString());
+            String rawSnapshot = null;
+            long snapshotFrames;
+            synchronized (rawCanLock) {
+                snapshotFrames = rawCanFrames;
+                if (snapshotFrames != lastQueuedRawFrames && rawCanLog.length() > 0) {
+                    rawSnapshot = "TouranLive raw CAN capture\nsession_id=" + telemetry.sessionId() +
+                            "\ntrim_events=" + rawCanTrimEvents +
+                            "\ngateway_session;gateway_ts_us;channel;can_id;frame_type;data_hex\n" + rawCanLog;
+                }
+            }
+            if (rawSnapshot != null) {
+                telemetry.queueSnapshot("raw-can", rawSnapshot);
+                lastQueuedRawFrames = snapshotFrames;
+            }
             if (!hasInternet()) {
                 appendSystemLog("SERVER_QUEUE", "offline pending=" + telemetry.pendingCount());
                 return;
@@ -2084,10 +2216,7 @@ public class MainActivity extends Activity {
         manualDisconnect = true;
         connecting = false;
         polling = false;
-        ui.post(() -> {
-            liveValues.clear();
-            if (dashboardView != null) dashboardView.invalidate();
-        });
+        clearGatewayValues();
         appendSystemLog("DISCONNECTED", "manual esp32-gateway");
         if (gateway != null) gateway.disconnect();
         setConnectionState("CAN: getrennt", RED);
@@ -2120,6 +2249,7 @@ public class MainActivity extends Activity {
     }
 
     private void updateLogBadge() {
+        if (destroyed) return;
         ui.post(() -> {
             if (loggerBadge != null) loggerBadge.setText("LOG: " + logRows + " · CAN: " + rawCanFrames);
             if (dashboardView != null) dashboardView.invalidate();
@@ -2138,7 +2268,7 @@ public class MainActivity extends Activity {
 
     private String csv(String s) {
         if (s == null) return "";
-        return "\"" + s.replace("\"","\"\"") + "\"";
+        return "\"" + s.replace("\r", "\\r").replace("\n", "\\n").replace("\"","\"\"") + "\"";
     }
 
     private String safe(String s) { return s == null ? "" : s; }
@@ -2236,7 +2366,10 @@ public class MainActivity extends Activity {
         connecting = false;
         autoUploadRunning = false;
         connectionSupervisorRunning = false;
-        try { if (telemetry != null && hasInternet()) telemetry.flush(LOG_UPLOAD_URL, getInstallId(), appVersionName()); } catch (Exception ignored) {}
+        destroyed = true;
+        manualDisconnect = true;
+        ui.removeCallbacksAndMessages(null);
+        if (gateway != null) gateway.close();
         closeSocket();
         io.shutdownNow();
         netIo.shutdownNow();

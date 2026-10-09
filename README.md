@@ -1,4 +1,4 @@
-﻿# 135er Touran – ESP32 CAN Gateway + Android App
+# 135er Touran – ESP32 CAN Gateway + Android App
 
 Zielsystem:
 - Volkswagen Touran 1T3, Modelljahr 2012
@@ -44,3 +44,26 @@ Es werden keine Werte simuliert oder erfunden. Ein Dashboardwert wird erst verwe
 4. Rohdaten-Capture bei Zündung, Leerlauf und gezielten Bedienaktionen erstellen.
 5. CAN-Signale gegen bekannte VCDS-Werte verifizieren.
 6. Erst danach gezielte aktive Diagnose und MFA/BAP-Kommunikation freigeben.
+
+## App 0.7.1 – geprüfte Gateway-Erweiterung
+
+Die App bietet eine echte Livewert-Seite, Capture-Start/Pause, Gateway-Status und manuelle Updateprüfung. Health-/Capture-Befehle blockieren nicht mehr hinter dem Datenempfang; veraltete Werte verschwinden. Fahrzeugwerte bleiben bis zur realen Verifikation der Dekoder unbelegt.
+
+Die [Quellen- und App-Prüfung vom 09.10.2026](docs/source-audit-2026-10-09.md) dokumentiert neue Primärquellen, umgesetzte Verbesserungen und die noch fehlenden Fahrzeugbelege.
+
+### Entwicklung und Prüfungen
+
+Wie in der CI: Java 17, Gradle 8.9, Android SDK 35; ESP-IDF v5.5.2 für ESP32-S3. In der Cloud wurde der Android-Build zusätzlich mit dem vorhandenen Java 21 geprüft.
+
+```sh
+cd android-app
+gradle :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
+```
+
+Die Regressionstests prüfen Protokollgrenzen, echte lokale TCP-Befehlsübertragung, Verbindungsende, Datenfrische, Update-Ursprung/Prüfsumme und Upload-Wiederholung. Tests ersetzen keine Fahrzeug- oder Erisin-Prüfung. Es werden keine Lint-Baselines oder abgeschalteten Fehlerprüfungen benötigt.
+
+### Test-APK herunterladen
+
+[TouranLive 0.7.1 Debug-APK](https://github.com/jygnw29kms-bit/135er-Touran/raw/refs/heads/main/downloads/TouranLive-0.7.1-debug.apk) · [SHA-256](downloads/TouranLive-0.7.1-debug.apk.sha256)
+
+ESP32-/WLAN-Entwicklungsstand, Android ab 8.0. 23 Tests, APK-Build und Lint erfolgreich geprüft. Installation als Update setzt einen kompatiblen Signierschlüssel voraus. Das Server-Update auf dezender.de wurde damit nicht geändert.

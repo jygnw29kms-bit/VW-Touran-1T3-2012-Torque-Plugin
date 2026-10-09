@@ -2,29 +2,27 @@ package de.growcentral.touranlive;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.RejectedExecutionException;
+import javax.net.SocketFactory;
 
-/**
- * Transport client for the dedicated Waveshare ESP32-S3-CAN-2CH-U gateway.
- *
- * The application no longer needs to know ELM327 commands or Bluetooth SPP.
- * Every gateway transport carries the same NDJSON protocol; Wi-Fi/TCP is the
- * first implemented transport and USB CDC / BLE can plug into the same parser.
- */
-public final class Esp32GatewayClient {
+/** Read-only NDJSON client. Reading and command writes have separate, session-scoped queues. */
+public final class Esp32GatewayClient implements AutoCloseable {
     public static final String DEFAULT_HOST = "192.168.4.1";
     public static final int DEFAULT_PORT = 13569;
+    private static final long HELLO_TIMEOUT_MS = 5000;
+    private static final long IDLE_TIMEOUT_MS = 15000;
+    private static final long HEALTH_INTERVAL_MS = 5000;
 
     public interface Listener {
         void onConnected(String board, String firmware, boolean readOnly);
@@ -35,161 +33,172 @@ public final class Esp32GatewayClient {
         void onProtocolError(String line, String reason);
     }
 
-    private final Listener listener;
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final AtomicBoolean running = new AtomicBoolean(false);
-    private volatile Socket socket;
-    private volatile BufferedWriter writer;
-
-    public Esp32GatewayClient(Listener listener) {
-        this.listener = listener;
-    }
-
-    public boolean isConnected() {
-        Socket s = socket;
-        return running.get() && s != null && s.isConnected() && !s.isClosed();
-    }
-
-    public void connectWifi() {
-        connectWifi(DEFAULT_HOST, DEFAULT_PORT);
-    }
-
-    public void connectWifi(String host, int port) {
-        if (!running.compareAndSet(false, true)) return;
-        io.execute(() -> runTcp(host, port));
-    }
-
-    private void runTcp(String host, int port) {
-        String disconnectReason = "connection closed";
-        try {
-            Socket s = new Socket();
-            s.setKeepAlive(true);
-            s.setTcpNoDelay(true);
-            s.connect(new InetSocketAddress(host, port), 2500);
-            socket = s;
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
-            writer = new BufferedWriter(new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8));
-            sendCommand(new JSONObject().put("cmd", "hello"));
-            sendCommand(new JSONObject().put("cmd", "capture").put("enable", true));
-
-            String line;
-            while (running.get() && (line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
-                parseLine(line.trim());
-            }
-        } catch (Exception e) {
-            disconnectReason = safe(e.getMessage());
-        } finally {
-            closeSocket();
-            running.set(false);
-            listener.onDisconnected(disconnectReason);
+    private static final class Session {
+        final SocketFactory factory;
+        volatile boolean running = true, ready;
+        volatile Socket socket;
+        BufferedWriter writer;
+        Session(SocketFactory factory) { this.factory = factory; }
+        void stop() {
+            running = false;
+            ready = false;
+            try { if (socket != null) socket.close(); } catch (IOException ignored) { }
+            synchronized (this) { writer = null; }
+        }
+        synchronized void send(JSONObject command) throws IOException {
+            if (!running || writer == null) return;
+            writer.write(command.toString()); writer.write('\n'); writer.flush();
         }
     }
 
-    public void requestHealth() {
-        sendAsync(new JSONObjectBuilder().put("cmd", "health").build());
+    private final Listener listener;
+    private final ExecutorService reads = Executors.newSingleThreadExecutor();
+    private final ExecutorService commands = Executors.newSingleThreadExecutor();
+    private volatile Session active;
+    private boolean closed;
+
+    public Esp32GatewayClient(Listener listener) { this.listener = listener; }
+    public boolean isConnected() { Session s = active; return s != null && s.running && s.ready; }
+    public void connectWifi() { connectWifi(DEFAULT_HOST, DEFAULT_PORT); }
+    public void connectWifi(String host, int port) { connectWifi(host, port, SocketFactory.getDefault()); }
+
+    /** Allows Android to bind only this socket to the local Wi-Fi network, leaving Internet jobs alone. */
+    public synchronized void connectWifi(String host, int port, SocketFactory factory) {
+        if (closed || active != null) return;
+        if (host == null || host.trim().isEmpty() || port < 1 || port > 65535 || factory == null) {
+            listener.onDisconnected("invalid gateway endpoint"); return;
+        }
+        Session s = new Session(factory);
+        active = s;
+        reads.execute(() -> runTcp(s, host, port));
     }
 
+    private static long nowMs() { return System.nanoTime() / 1000000L; }
+
+    private void runTcp(Session s, String host, int port) {
+        String reason = "connection closed";
+        try {
+            // Publish the socket before connect so cancellation also interrupts connection attempts.
+            synchronized (s) {
+                if (!s.running) return;
+                s.socket = s.factory.createSocket();
+            }
+            Socket socket = s.socket;
+            socket.setKeepAlive(true); socket.setTcpNoDelay(true); socket.setSoTimeout(1000);
+            socket.connect(new InetSocketAddress(host, port), 2500);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream(),
+                    StandardCharsets.UTF_8.newDecoder()))) {
+                synchronized (s) {
+                    if (!s.running) return;
+                    s.writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+                }
+                s.send(new JSONObject().put("cmd", "hello"));
+                long started = nowMs(), lastMessage = started, lastHealth = started;
+                StringBuilder line = new StringBuilder();
+                boolean oversized = false;
+                while (s.running) {
+                    long now = nowMs();
+                    if (!s.ready && now - started >= HELLO_TIMEOUT_MS) throw new IOException("gateway hello timeout");
+                    if (now - lastMessage >= IDLE_TIMEOUT_MS) throw new IOException("gateway response timeout");
+                    if (s.ready && now - lastHealth >= HEALTH_INTERVAL_MS) {
+                        s.send(new JSONObject().put("cmd", "health")); lastHealth = now;
+                    }
+                    int c;
+                    try { c = reader.read(); } catch (SocketTimeoutException timeout) { continue; }
+                    if (c < 0) break;
+                    if (c == '\n') {
+                        if (!oversized && line.length() > 0 && parseLine(s, line.toString())) lastMessage = nowMs();
+                        line.setLength(0); oversized = false;
+                    } else if (c != '\r' && !oversized) {
+                        if (line.length() >= GatewayProtocol.MAX_LINE_CHARS) {
+                            listener.onProtocolError("", "gateway line too long"); line.setLength(0); oversized = true;
+                        } else line.append((char)c);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            reason = s.running ? safe(e.getMessage()) : "disconnected";
+        } finally {
+            s.stop();
+            synchronized (this) { if (active == s) active = null; }
+            listener.onDisconnected(reason);
+        }
+    }
+
+    private boolean parseLine(Session s, String line) throws Exception {
+        JSONObject o;
+        try { o = GatewayProtocol.parse(line); }
+        catch (Exception e) {
+            listener.onProtocolError(line, safe(e.getMessage()));
+            // A peer announcing incompatible identity/mode cannot establish a trusted session.
+            String type = "";
+            try { type = new JSONObject(line).optString("type"); } catch (Exception ignored) { }
+            if ("hello".equals(type) || "health".equals(type)) throw new IOException("incompatible gateway: " + e.getMessage());
+            return false;
+        }
+        String type = o.getString("type");
+        if (!s.ready && !"hello".equals(type)) {
+            listener.onProtocolError(line, "message before gateway hello"); return false;
+        }
+        if (!s.running) return false;
+        switch (type) {
+            case "hello":
+                if (!s.ready) {
+                    s.ready = true;
+                    s.send(new JSONObject().put("cmd", "capture").put("enable", true));
+                    listener.onConnected(o.getString("board"), o.getString("fw"), true);
+                }
+                break;
+            case "can":
+                listener.onCanFrame(o.getInt("ch"), o.getLong("ts_us"), o.getLong("id"),
+                        o.getBoolean("ext"), GatewayProtocol.decodeHex(o.getString("data")));
+                break;
+            case "value":
+                listener.onValue(o.getString("name"), o.getDouble("value"), o.getString("unit"),
+                        o.getLong("ts_us"), o.getString("source"));
+                break;
+            case "health": listener.onHealth(o); break;
+            case "error": listener.onProtocolError(line, o.getString("code") + ": " + o.getString("message")); break;
+            default: break;
+        }
+        return true;
+    }
+
+    public void requestHealth() { sendAsync(command("health")); }
     public void setCapture(boolean enabled) {
-        sendAsync(new JSONObjectBuilder().put("cmd", "capture").put("enable", enabled).build());
+        try { sendAsync(command("capture").put("enable", enabled)); }
+        catch (Exception e) { listener.onProtocolError("capture", safe(e.getMessage())); }
     }
-
     public void setFilter(int channel, long... ids) {
         try {
+            if (channel != 1 && channel != 2) throw new IllegalArgumentException("invalid CAN channel");
             JSONArray a = new JSONArray();
-            if (ids != null) for (long id : ids) a.put(id);
-            JSONObject o = new JSONObject();
-            o.put("cmd", "filter");
-            o.put("ch", channel);
-            o.put("ids", a);
-            sendAsync(o);
-        } catch (Exception e) {
-            listener.onProtocolError("filter", safe(e.getMessage()));
-        }
+            if (ids != null) for (long id : ids) {
+                if (id < 0 || id > 0x1fffffffL) throw new IllegalArgumentException("invalid CAN identifier");
+                a.put(id);
+            }
+            sendAsync(command("filter").put("ch", channel).put("ids", a));
+        } catch (Exception e) { listener.onProtocolError("filter", safe(e.getMessage())); }
     }
-
+    private static JSONObject command(String name) {
+        JSONObject o = new JSONObject();
+        try { o.put("cmd", name); } catch (Exception e) { throw new IllegalStateException(e); }
+        return o;
+    }
     private void sendAsync(JSONObject command) {
-        io.execute(() -> {
-            try {
-                sendCommand(command);
-            } catch (Exception e) {
-                listener.onProtocolError(command.toString(), safe(e.getMessage()));
-            }
-        });
-    }
-
-    private synchronized void sendCommand(JSONObject command) throws Exception {
-        BufferedWriter w = writer;
-        if (w == null) return;
-        w.write(command.toString());
-        w.write('\n');
-        w.flush();
-    }
-
-    private void parseLine(String line) {
+        Session s = active;
+        if (s == null || !s.ready || !s.running) return;
         try {
-            JSONObject o = new JSONObject(line);
-            String type = o.optString("type", "");
-            switch (type) {
-                case "hello":
-                    listener.onConnected(o.optString("board", "ESP32-S3-CAN-2CH-U"),
-                            o.optString("fw", "unknown"), o.optBoolean("readonly", true));
-                    break;
-                case "can":
-                    listener.onCanFrame(o.optInt("ch", 0), o.optLong("ts_us", 0L),
-                            o.optLong("id", 0L), o.optBoolean("ext", false),
-                            decodeHex(o.optString("data", "")));
-                    break;
-                case "value":
-                    listener.onValue(o.optString("name", ""), o.optDouble("value", Double.NaN),
-                            o.optString("unit", ""), o.optLong("ts_us", 0L), o.optString("source", ""));
-                    break;
-                case "health":
-                    listener.onHealth(o);
-                    break;
-                default:
-                    listener.onProtocolError(line, "unknown type: " + type);
-                    break;
-            }
-        } catch (Exception e) {
-            listener.onProtocolError(line, safe(e.getMessage()));
-        }
+            commands.execute(() -> {
+                if (active != s || !s.running || !s.ready) return;
+                try { s.send(command); }
+                catch (IOException e) { listener.onProtocolError(command.toString(), safe(e.getMessage())); s.stop(); }
+            });
+        } catch (RejectedExecutionException ignored) { /* client closed */ }
     }
-
-    public void disconnect() {
-        running.set(false);
-        closeSocket();
+    public void disconnect() { Session s = active; if (s != null) s.stop(); }
+    @Override public synchronized void close() {
+        closed = true; disconnect(); reads.shutdownNow(); commands.shutdownNow();
     }
-
-    private synchronized void closeSocket() {
-        writer = null;
-        Socket s = socket;
-        socket = null;
-        try { if (s != null) s.close(); } catch (Exception ignored) {}
-    }
-
-    private static byte[] decodeHex(String hex) {
-        String s = hex == null ? "" : hex.replaceAll("[^0-9A-Fa-f]", "");
-        if ((s.length() & 1) != 0) s = "0" + s;
-        byte[] out = new byte[s.length() / 2];
-        for (int i = 0; i < out.length; i++) {
-            out[i] = (byte) Integer.parseInt(s.substring(i * 2, i * 2 + 2), 16);
-        }
-        return out;
-    }
-
-    private static String safe(String s) {
-        return s == null || s.trim().isEmpty() ? "unknown" : s.trim();
-    }
-
-    /** Tiny checked-exception-free helper used for fixed commands. */
-    private static final class JSONObjectBuilder {
-        private final JSONObject o = new JSONObject();
-        JSONObjectBuilder put(String key, Object value) {
-            try { o.put(key, value); } catch (Exception ignored) {}
-            return this;
-        }
-        JSONObject build() { return o; }
-    }
+    private static String safe(String s) { return s == null || s.trim().isEmpty() ? "unknown" : s.trim(); }
 }
