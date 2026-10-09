@@ -1,0 +1,13 @@
+;SW:5K0-959-703-A   HW:5K0-959-703-A ---  Türelektr. hi. li.
+;Bauteil:Tuer-SG         007 2104, Codierung:0000144
+;Montag,05,Oktober,2026,13:50:24:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,unbetätigt,,unbetätigt,,Endanschl.gel,,inaktiv,,
+2,unbetätigt,,Ja,,0.0 %,,0.0 km/h,,
+3,12.01 V,,Bus i.O.,,Kl.15 EIN,,betätigt,,
+4,0.0 %,,aktiviert,,n. verbaut,,n.v.,,
+5,entriegelt,,Tür zu,,n. verbaut,,n.v.,,
+80,KO1-KLO 25.08.11 00007000 0013 0436,,

@@ -1,0 +1,384 @@
+{
+  "created_utc": "2026-10-09T12:04:38.832266+00:00",
+  "vcds_version_user_supplied": "PCI 23.11.0.1 / Datenstand 20240306 DS351.0",
+  "files": [
+    {
+      "source_relative_path": "Log-[VIN_REDACTED]-175300km.txt",
+      "original_sha256": "a3036b2c784f464280f2c9300acdca6131388d53dc4f5cd1a3f1d1e4b9c29d64",
+      "vin_like_tokens_redacted": 2,
+      "private_lines_redacted": 50,
+      "ecu_addresses": [
+        "01",
+        "03",
+        "08",
+        "09",
+        "10",
+        "15",
+        "16",
+        "17",
+        "19",
+        "20",
+        "25",
+        "37",
+        "42",
+        "44",
+        "52",
+        "56",
+        "61",
+        "62",
+        "72",
+        "77"
+      ],
+      "file": "export-001.txt",
+      "sha256": "59a6cad1ce2f7331f12734bbea79422c396b0b7bf824334d10415b8483681a4d"
+    },
+    {
+      "source_relative_path": "blockmap-01-03C-906-027-CR_[VIN_REDACTED]-20261005-1344.CSV",
+      "original_sha256": "9a52b84ef31ebc6afe09661258e720f63c32287f62e95ec94b9fe27441f29717",
+      "vin_like_tokens_redacted": 1,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-002.csv",
+      "sha256": "34707ff1f3d849d869f8d9f5ab0889eaf2b248650b32a4fb8f2d3b78c41dcbd6"
+    },
+    {
+      "source_relative_path": "blockmap-01-03C-906-027-CR_[VIN_REDACTED]-20261005-1357.CSV",
+      "original_sha256": "65719b6a9a546a8952ebc5780876d4df8ea769eb8e764d13de3f170820a51c03",
+      "vin_like_tokens_redacted": 1,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-003.csv",
+      "sha256": "31efeab5492493d31728a61c9857950a086f10766ae33f8c1a7e1636169f1b8c"
+    },
+    {
+      "source_relative_path": "blockmap-03-1K0-907-379-BJ_[VIN_REDACTED]-20261005-1344.CSV",
+      "original_sha256": "3ce3caddf3ce2c71bba516f2a8be7d93b9760ea87f75d781b29da0f024d7c887",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-004.csv",
+      "sha256": "120d093ef5241efd6bf5f482d5944fc1550431418dc3ab9fb19a98552a4dba29"
+    },
+    {
+      "source_relative_path": "blockmap-03-1K0-907-379-BJ_[VIN_REDACTED]-20261005-1358.CSV",
+      "original_sha256": "7362057e6efad2cf6e11b752329a6e687ed43be9b7f691b8a3e0135185edebdc",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-005.csv",
+      "sha256": "2735ff73890451b4e488f38404a50befb1dc5ee68e23e238df3410cc9c79aab1"
+    },
+    {
+      "source_relative_path": "blockmap-08-5K0-907-044-ES_[VIN_REDACTED]-20261005-1345.CSV",
+      "original_sha256": "1dbae34aafbee69ba736fd31db5426cad629d7fbaec4acd43e144f0bd7e679ed",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-006.csv",
+      "sha256": "4ac9f94926e4ad64a885c52c3ebd7fb2ed1b9d438561f5284850f32660075673"
+    },
+    {
+      "source_relative_path": "blockmap-08-5K0-907-044-ES_[VIN_REDACTED]-20261005-1359.CSV",
+      "original_sha256": "3d757cf217ff8d31c042d6342e7f4c0128edc240d450cfc55279a6463af3983a",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-007.csv",
+      "sha256": "313f654f4f9c097fdde62513c773c23ef61cbc8bbb3f400299f3db66cf66643e"
+    },
+    {
+      "source_relative_path": "blockmap-09-5K0-937-086-J_[VIN_REDACTED]-20261005-1345.CSV",
+      "original_sha256": "2f6ce778d161f3cc646f2fc84597d7723af31f3a2f005416fa53557e4a269105",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-008.csv",
+      "sha256": "a802e05aba6867c3b4df8d9d80414c8a7fd8085211c0261536b43789285eb3c8"
+    },
+    {
+      "source_relative_path": "blockmap-09-5K0-937-086-J_[VIN_REDACTED]-20261005-1359.CSV",
+      "original_sha256": "7ca139442917ce9defd234b7e630bba2702ca005e3bb5f99016cb23889e31c9a",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-009.csv",
+      "sha256": "2a245f45f8de55d806664e07b955494042ce0dd45b1d54c481f2e0195b5c7c19"
+    },
+    {
+      "source_relative_path": "blockmap-10-3AA-919-475-L_[VIN_REDACTED]-20261005-1346.CSV",
+      "original_sha256": "88a0d4798896d14afe4d5653090e1408213e368cae55af61795b1c573c1a6a70",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-010.csv",
+      "sha256": "3cb2fd39d122b24326963eb79ef122deca3769a882bbbc7f964f24a75256d775"
+    },
+    {
+      "source_relative_path": "blockmap-10-3AA-919-475-L_[VIN_REDACTED]-20261005-1400.CSV",
+      "original_sha256": "3257d566a0b7bdb76a704e23b0701e28648b0c15a5f06ae6806d49931950d54f",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-011.csv",
+      "sha256": "fe683aa21e57cc3f4b401b398edf61cc45f1df6dd4973917d7f82eee76e29681"
+    },
+    {
+      "source_relative_path": "blockmap-15-1T0-909-605-E_[VIN_REDACTED]-20261005-1346.CSV",
+      "original_sha256": "2528fa740f58cae6e30f1e7a513bfce06dce493cc40009566802ea9ebd25cdff",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-012.csv",
+      "sha256": "00d7852025ba0ddb51305ee299a34afec4a29bde9faae3f1b7d07c696a33a6d9"
+    },
+    {
+      "source_relative_path": "blockmap-15-1T0-909-605-E_[VIN_REDACTED]-20261005-1400.CSV",
+      "original_sha256": "9d62324714e64226af827d4aeacb742f5944772a3697afd71f2423607d3fdc82",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-013.csv",
+      "sha256": "676cdcddabb25d47b43809de7c2f0edb67dc3e2e889467781db4a7389e59189c"
+    },
+    {
+      "source_relative_path": "blockmap-16-5K0-953-501-BH_[VIN_REDACTED]-20261005-1347.CSV",
+      "original_sha256": "23cb299a54a96b2076631cc3c7d55b396052dc1f093ef51b5127abc3909cb6bd",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-014.csv",
+      "sha256": "cc32693f8c55627c5733b82941cae34924a3a3348f2fc7e7fbc48a73dcd6c390"
+    },
+    {
+      "source_relative_path": "blockmap-16-5K0-953-501-BH_[VIN_REDACTED]-20261005-1401.CSV",
+      "original_sha256": "35b1274208d9b20f8de62341d162b973089cf452e0dd807533025bdcef405eaf",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-015.csv",
+      "sha256": "c30bbf23c419925ebf5b03f17ad758d9bd80da04e1186b7fc66d314b13ab6c74"
+    },
+    {
+      "source_relative_path": "blockmap-17-1T0-920-875_[VIN_REDACTED]-20261005-1343.CSV",
+      "original_sha256": "1a13e28b8062f3bbb5d7efc16c539114eb1002ee1a206816cfe58f38c75a6506",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-016.csv",
+      "sha256": "33cfb6bcc6d31982cdf2396faa71fbffda8aede7c8de4bd93e6e0c29247bf5ee"
+    },
+    {
+      "source_relative_path": "blockmap-17-1T0-920-875_[VIN_REDACTED]-20261005-1356.CSV",
+      "original_sha256": "380c5118bfc868d047ebcb245a6142e0970abfc9aa7789558d37646ce7e25fe7",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-017.csv",
+      "sha256": "f7df2aef553d9ef625394930dbee9b50f3f9e894e22d1017922c5546e01f4bbe"
+    },
+    {
+      "source_relative_path": "blockmap-19-7N0-907-530-J_[VIN_REDACTED]-20261005-1343.CSV",
+      "original_sha256": "41b9a0e1ba936c4b565aa6d655c35814ad3699a1ad31f511b4a7a036d2f9541d",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-018.csv",
+      "sha256": "dc45acc275d9f8cca3b34acec28a887b62cb06191df80a869e1797a9128287f5"
+    },
+    {
+      "source_relative_path": "blockmap-19-7N0-907-530-J_[VIN_REDACTED]-20261005-1357.CSV",
+      "original_sha256": "dddafd3467a449ea85146805d0ad07b68f0e856ffce745e82e55ab3a23c07a4b",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-019.csv",
+      "sha256": "0b4d7ff503f02420bc32abcb98aa9ea67fc0e9d57eed7268eb715613ddd81145"
+    },
+    {
+      "source_relative_path": "blockmap-20-5K0-857-511-B_[VIN_REDACTED]-20261005-1347.CSV",
+      "original_sha256": "812f973e21c32099becc62c1433a7adba1f78fa079194fb8214954e17903c647",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-020.csv",
+      "sha256": "638e0247b1586ca2b0e6712d536bef4eed85cd14a85c7f1a7d2aded31a20419c"
+    },
+    {
+      "source_relative_path": "blockmap-20-5K0-857-511-B_[VIN_REDACTED]-20261005-1401.CSV",
+      "original_sha256": "6d7db828440e39d6b67d25271d01ae4558fdecfbe3b94c562876ed63f2e384d7",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-021.csv",
+      "sha256": "9de181a3c600892ab411084319b455adf52a1d28352bbbbbe9d001570bffce5e"
+    },
+    {
+      "source_relative_path": "blockmap-25-5K0-953-234_[VIN_REDACTED]-20261005-1347.CSV",
+      "original_sha256": "d70b0d37f7a99471526b5214e6354d5d8f95146da7081352949cb096ebe5d49f",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-022.csv",
+      "sha256": "3875165edae023b7349ee0a19f5b6acdc674154264d956c5e6d71d4456123ae5"
+    },
+    {
+      "source_relative_path": "blockmap-25-5K0-953-234_[VIN_REDACTED]-20261005-1401.CSV",
+      "original_sha256": "217dba9ed8235059b61f73fe5dac46b5e184e6710dc9d4ca2aac1763619360ed",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-023.csv",
+      "sha256": "433174f559180b2d97033e1bf74d4804b3d183f6fbe9b666dafacf6244c8c774"
+    },
+    {
+      "source_relative_path": "blockmap-42-1T0-959-701-AA_[VIN_REDACTED]-20261005-1348.CSV",
+      "original_sha256": "d28f5b663951213ddb837123c4c7e6f91dc9b55c8e6b8a6d69d5a298d717e35e",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-024.csv",
+      "sha256": "774de191732472d409bb7ef5fc2f38aa0a89a4cc442db402becafdc375d3b1c4"
+    },
+    {
+      "source_relative_path": "blockmap-42-1T0-959-701-AA_[VIN_REDACTED]-20261005-1401.CSV",
+      "original_sha256": "7a9d75c7c20f8d384383b905551c1206d070e6a839ccb2e337dfca3e2600fa8e",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-025.csv",
+      "sha256": "f15354b5e5d15c59eb8a9394c5529ba6e3bbfa74e1d20d42b0fd98dfd97b68ef"
+    },
+    {
+      "source_relative_path": "blockmap-44-5N1-909-144-M_[VIN_REDACTED]-20261005-1348.CSV",
+      "original_sha256": "3ef10a98f6a80d92bad49803809c913f916e44f9573359b3c8f6e5ac9b8f3da4",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-026.csv",
+      "sha256": "686932e5a4d340c5497d4cf5c04045795b5a99db5fd6c1e8b3306c4ac9aa0df9"
+    },
+    {
+      "source_relative_path": "blockmap-44-5N1-909-144-M_[VIN_REDACTED]-20261005-1402.CSV",
+      "original_sha256": "ee3326f2c21d35052edb82a977a9f700abc06ee0fc0617ae30a83b37bc741e88",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-027.csv",
+      "sha256": "fddfe9c2dca2de2a7e7531e051018533c20096fd2bdd876378d445e67aa4764c"
+    },
+    {
+      "source_relative_path": "blockmap-52-1T0-959-702-S_[VIN_REDACTED]-20261005-1349.CSV",
+      "original_sha256": "18f40066b6604cd44ab9cd1012394911ebb1faa5688cc159b2765edabe1fc76c",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-028.csv",
+      "sha256": "c7ce2c9e83b29438e0319c7434dff976272c8330fcc9c2f0740d256b067590c5"
+    },
+    {
+      "source_relative_path": "blockmap-52-1T0-959-702-S_[VIN_REDACTED]-20261005-1402.CSV",
+      "original_sha256": "9c3c897db6394f9c6039fc412c71a319e8ccac17eb299d0149b8048972f469ca",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-029.csv",
+      "sha256": "de4d920c8a31f9ab1b973417266292e8598120e2d11f9930915a6fe35725e5a1"
+    },
+    {
+      "source_relative_path": "blockmap-61-7N0-907-534_[VIN_REDACTED]-20261005-1349.CSV",
+      "original_sha256": "d3a261f0db48ef802275a720a6720eb257fac4b00e992823b9531b330a087ea2",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-030.csv",
+      "sha256": "605a9407c70e8a7f825cd8e6dcd47cd75711524e933d6bac429cf3f9d79f50e0"
+    },
+    {
+      "source_relative_path": "blockmap-61-7N0-907-534_[VIN_REDACTED]-20261005-1403.CSV",
+      "original_sha256": "6b2e9a12fa48c8e76020fd405671aef31c36dc163ba993050422a1862d029b62",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-031.csv",
+      "sha256": "ba9f1f26696b85fa1ec8b9e55e1708415201d2c911f6a18eb0117138ea9238ff"
+    },
+    {
+      "source_relative_path": "blockmap-62-5K0-959-703-A_[VIN_REDACTED]-20261005-1350.CSV",
+      "original_sha256": "1288deeb9a1e68cab9b53897c861e55dd193f7bcc01d753ca332f746328d2c57",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-032.csv",
+      "sha256": "2c04e5b56a798ca74025ef91688cf49bd3bb3a91ad39d49c446108c6699c9940"
+    },
+    {
+      "source_relative_path": "blockmap-62-5K0-959-703-A_[VIN_REDACTED]-20261005-1404.CSV",
+      "original_sha256": "bfb6f8cd43d9634b074a4a215cead5e63dc5f97fda3adfb0221fbe53032b0e47",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-033.csv",
+      "sha256": "8f781559d3d4cb4ac0dcf9fee7326f0c05de4f2e74a7a35cd4d71bf7c1cdaa41"
+    },
+    {
+      "source_relative_path": "blockmap-72-5K0-959-704-A_[VIN_REDACTED]-20261005-1351.CSV",
+      "original_sha256": "93c248996929ff0adac8ae27e0cd3a5ac0e7b850f89ff686b46413cdf6eb58b8",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-034.csv",
+      "sha256": "fb77a392c4727eca53696a8c23b365854c0ffa9c8499259b61b225fd58e995b4"
+    },
+    {
+      "source_relative_path": "blockmap-72-5K0-959-704-A_[VIN_REDACTED]-20261005-1404.CSV",
+      "original_sha256": "28d91f311be5ff50945935a9f0e651b075500b9f250d0b453f6489cbae18bff0",
+      "vin_like_tokens_redacted": 0,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-035.csv",
+      "sha256": "3d59578aafc0c931db84b8db554158c6b7008d66b118ecd25be2ce698a0772b7"
+    },
+    {
+      "source_relative_path": "blockmap-OBD_[VIN_REDACTED]-20261005-1351.CSV",
+      "original_sha256": "ae56bf2477c72c9b18198fa02b512673ac71c65a44c5e790db608099e90f7f02",
+      "vin_like_tokens_redacted": 1,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-036.csv",
+      "sha256": "1a74043589eb9bdde4258878506794599fd500e2c7296fb677c383168f83c249"
+    },
+    {
+      "source_relative_path": "blockmap-OBD_[VIN_REDACTED]-20261005-1405.CSV",
+      "original_sha256": "16395a782f9f57bef4c4bfd2e4e797bde2fd5776f4457171040940e07946260d",
+      "vin_like_tokens_redacted": 1,
+      "private_lines_redacted": 1,
+      "ecu_addresses": [],
+      "file": "export-037.csv",
+      "sha256": "0d823264b090a8b311335842d0826a49131a1cdeea0aee462fc765ada987e0bc"
+    }
+  ],
+  "ecu_addresses_seen": [
+    "01",
+    "03",
+    "08",
+    "09",
+    "10",
+    "15",
+    "16",
+    "17",
+    "19",
+    "20",
+    "25",
+    "37",
+    "42",
+    "44",
+    "52",
+    "56",
+    "61",
+    "62",
+    "72",
+    "77"
+  ],
+  "diagnostic_completeness": "not_verified",
+  "note": "VIN-Muster automatisch ersetzt; Namen, Kennzeichen, Seriennummern und Pfade vor Git-Upload manuell prüfen. Keine Aussage über Kommunikationsprotokoll oder CAN-IDs."
+}

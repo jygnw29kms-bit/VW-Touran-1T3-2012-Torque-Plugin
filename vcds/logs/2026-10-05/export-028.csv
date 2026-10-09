@@ -1,0 +1,16 @@
+;SW:1T0-959-702-S   HW:1T0-959-702-S ---  Türelektr. Beifahr.
+;Bauteil:Tuer-SG         009 2121, Codierung:0004535
+;Montag,05,Oktober,2026,13:49:10:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,unbetätigt,,unbetätigt,,Endanschl.gel,,inaktiv,,
+2,unbetätigt,,Ja,,0.0 %,,0.0 km/h,,
+3,11.83 V,,Zweidraht,,Kl.15 EIN,,betätigt,,
+4,0.0 %,,aktiviert,,n. verbaut,,0.0 %,,
+5,entriegelt,,Tür zu,,unbetätigt,,n. verbaut,,
+6,n. verbaut,,inaktiv,,inaktiv,,unbetätigt,,
+7,unbetätigt,,57.6 %,,66.3 %,,aktiviert,,
+8,inaktiv,,n. verbaut,,n. verbaut,,n.v.,,
+80,KO1-KLO 10.08.11 00009000 0005 1773,,

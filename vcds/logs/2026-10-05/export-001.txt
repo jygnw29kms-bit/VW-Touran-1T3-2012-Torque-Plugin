@@ -1,0 +1,383 @@
+Montag,05,Oktober,2026,13:40:52:16365
+VCDS -- Windows-basierter VAG/VAS-Emulator läuft auf Windows 7 x64
+VCDS Version: PCI 23.11.0.1  HEX-V2 CB: 0.4643.4
+Datenstand: 20240306 DS351.0
+www.vcdspro.de
+
+
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+Fahrzeugtyp: 1T-VW36 (7N0)
+Scan: 01 03 08 09 10 15 16 17 19 20 25 37 42 44 46 52 56 61 62 72
+          77
+
+Fahrzeug-Ident.-Nr.: [VIN_REDACTED]   Kilometerstand: 175300km
+
+01-Motorelektronik -- Status: i.O. 0000
+03-Bremsenelektronik -- Status: i.O. 0000
+04-Lenkwinkelsensor -- Status: i.O. 0000
+08-Klima-/Heizungsel. -- Status: i.O. 0000
+09-Zentralelektrik -- Status: Fehler 0010
+10-Einparkhilfe 2 -- Status: i.O. 0000
+15-Airbag -- Status: i.O. 0000
+16-Lenkradelektronik -- Status: Fehler 0010
+17-Schalttafeleinsatz -- Status: i.O. 0000
+19-Diagnoseinterface -- Status: Fehler 0010
+20-Fernlichtassistent -- Status: i.O. 0000
+25-Wegfahrsperre -- Status: i.O. 0000
+37-Navigation -- Status: nicht angemeldet 0011
+42-Türelektr. Fahrer -- Status: i.O. 0000
+44-Lenkhilfe -- Status: i.O. 0000
+46-Komfortsystem -- Status: i.O. 0000
+52-Türelektr. Beifahr. -- Status: i.O. 0000
+56-Radio -- Status: Fehler 0010
+61-Batterieregelung -- Status: i.O. 0000
+62-Türelektr. hi. li. -- Status: i.O. 0000
+72-Türelektr. hi. re. -- Status: i.O. 0000
+77-Telefon -- Status: nicht erreichbar 1100
+-------------------------------------------------------------------------------
+Adresse 01: Motorelektronik (CAV)       Labeldatei: DRV\03C-906-027-CAV.clb
+   Teilenummer SW: 03C 906 027 CR    HW: 03C 907 309 B
+   Bauteil: MED17.5.5       G01 1669  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 0000072
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+Readiness: 0000 0000
+
+-------------------------------------------------------------------------------
+Adresse 03: Bremsenelektronik (J104)       Labeldatei:. DRV\1K0-907-379-60EC1F.clb
+   Teilenummer SW: 1K0 907 379 BJ    HW: 1K0 907 379 BJ
+   Bauteil: ESP MK60EC1   H31 0121  
+   Revision: 00H31001    
+   Codierung: 323B401609250E014C1302E790197040310150
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 08: Klima-/Heizungsel. (J255)       Labeldatei:| DRV\5K0-907-044.clb
+   Teilenummer SW: 5K0 907 044 ES    HW: 5K0 907 044 ES
+   Bauteil: Climatronic   H18 1112  
+   Revision: 00001003    
+   Codierung: 0000004002
+[PRIVATE_FIELD_REDACTED]
+   ASAM Datensatz: EV_Climatronic A01010
+   ROD: EV_ClimaAutoBasis_VW36.rod
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 09: Zentralelektrik (J519)       Labeldatei:. DRV\1K0-937-08x-09.clb
+   Teilenummer SW: 5K0 937 086 J    HW: 5K0 937 086 J
+   Bauteil: BCM PQ35 M    011 0048  
+   Revision: BC011001    
+   Codierung: 40180A3888331AE0400800C8540081E44B518E08726D8520648042000040
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+   Subsystem 1 - Teilenummer: 1T1 955 119 A  Labeldatei: DRV\1KX-955-119.CLB
+   Bauteil: Wischer 06091  26  0512 
+   Codierung: 009795
+
+   Subsystem 2 - Teilenummer: 1K0 955 559 AH  Labeldatei: DRV\1K0-955-559-AG.CLB
+   Bauteil: RLS 300811 05  54  0403 
+   Codierung: 0230ED
+
+3 Fehlercodes gefunden:
+00978 - Lampe für Abblendlichtscheinwerfer links (M29) 
+            010 - Unterbrechung/Kurzschluss nach Plus
+             Umgebungsbedingungen:
+                    Fehlerstatus: 01101010
+                    Fehlerpriorität: 1
+                    Fehlerhäufigkeit: 191
+                    Verlernzähler: 207
+                    Kilometerstand: 173509 km
+                    Zeitangabe: 0
+                    Datum: 2021.02.25
+                    Zeit: 11:15:37
+
+             Umgebungsbedingungen:
+                        Kl.15 EIN
+                    Spannung: 11.90 V
+                        ein
+                        ein
+                        aus
+                        aus
+                        aus
+
+01134 - Alarmhorn (H12) 
+            012 - elektrischer Fehler im Stromkreis
+             Umgebungsbedingungen:
+                    Fehlerstatus: 01101100
+                    Fehlerpriorität: 4
+                    Fehlerhäufigkeit: 1
+                    Verlernzähler: 84
+                    Kilometerstand: 173644 km
+                    Zeitangabe: 0
+                    Datum: 2021.02.25
+                    Zeit: 07:13:31
+
+             Umgebungsbedingungen:
+                        Kl.15 AUS
+                    Spannung: 12.55 V
+                        aus
+                        ein
+                        aus
+                        aus
+                        aus
+
+02394 - Lampe für Standlicht vorne links (M1) 
+            010 - Unterbrechung/Kurzschluss nach Plus - Sporadisch
+             Umgebungsbedingungen:
+                    Fehlerstatus: 00101010
+                    Fehlerpriorität: 2
+                    Fehlerhäufigkeit: 1
+                    Verlernzähler: 246
+                    Kilometerstand: 175291 km
+                    Zeitangabe: 0
+                    Datum: 2021.02.25
+                    Zeit: 12:53:28
+
+             Umgebungsbedingungen:
+                        Kl.15 EIN
+                    Spannung: 11.75 V
+                        ein
+                        ein
+                        aus
+                        aus
+                        aus
+
+
+-------------------------------------------------------------------------------
+Adresse 10: Einparkhilfe 2 (J791)       Labeldatei:| DRV\3AA-919-475.clb
+   Teilenummer SW: 3AA 919 475 L    HW: 4H0 919 475 E
+   Bauteil: PARKHILFE PLA H06 0025  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 148001
+[PRIVATE_FIELD_REDACTED]
+   ASAM Datensatz: EV_EPHVA2C000000000 002008
+   ROD: EV_EPHVA2C000000000.rod
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 15: Airbag        Labeldatei: DRV\1T0-909-605.lbl
+   Teilenummer SW: 1T0 909 605 E    HW: 1T0 909 605 E
+   Bauteil: 02 AIRBAG VW8   022 0100  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 0012338
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+[PRIVATE_FIELD_REDACTED]
+
+[PRIVATE_FIELD_REDACTED]
+
+[PRIVATE_FIELD_REDACTED]
+
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 16: Lenkradelektronik (J527)       Labeldatei:| DRV\5K0-953-569.clb
+   Teilenummer SW: 5K0 953 501 BH    HW: 5K0 953 569 L
+   Bauteil: LENKS.MODUL   014 0140  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 1182140000
+[PRIVATE_FIELD_REDACTED]
+   ASAM Datensatz: EV_VW360SteerWheelUDS A03004
+   ROD: EV_VW360SteerWheelUDS.rod
+[PRIVATE_FIELD_REDACTED]
+
+   Steuergerät für Multifunktionslenkrad: 
+   Subsystem 1 - Teilenummer SW: 5K0 959 542 A    HW: 5K0 959 542 A  Labeldatei: DRV\3C8-959-537.CLB
+   Bauteil: E221__MFL-TAS  H09 0013 
+   Codierung: 820000
+
+1 Fehler gefunden:
+226057 - Zündanlassschalter / Klemme S 
+          B1147 F1 [00001000] - Unterbrechung/Kurzschluss nach Masse
+          Sporadisch - bestätigt - geprüft seit letzter Löschung
+             Umgebungsbedingungen:
+                    Fehlerpriorität: 2
+                    Fehlerhäufigkeit: 1
+                    Verlernzähler: 237
+                    Kilometerstand: 175179 km
+                    Datum: 2026.10.05
+                    Zeit: 17:03:48
+
+
+-------------------------------------------------------------------------------
+Adresse 17: Schalttafeleinsatz (J285)       Labeldatei:| DRV\5K0-920-xxx-17.clb-SRI1
+   Teilenummer SW: 1T0 920 875     HW: 1T0 920 875 
+   Bauteil: KOMBI         H04 0607  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 181F00
+[PRIVATE_FIELD_REDACTED]
+   ASAM Datensatz: EV_Kombi_UDS_VDD_RM09 A04114
+   ROD: EV_Kombi_UDS_VDD_RM09_004_VW32.rod
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 19: Diagnoseinterface (J533)       Labeldatei:. DRV\7N0-907-530-V2.clb
+   Teilenummer SW: 7N0 907 530 J    HW: 1K0 907 951 
+   Bauteil: J533  Gateway H43 1620  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 358002
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+3 Fehlercodes gefunden:
+01305 - Datenbus Infotainment 
+            004 - kein Signal/Kommunikation - Sporadisch
+             Umgebungsbedingungen:
+                    Fehlerstatus: 00100100
+                    Fehlerpriorität: 1
+                    Fehlerhäufigkeit: 254
+                    Verlernzähler: 247
+                    Kilometerstand: 172667 km
+                    Zeitangabe: 0
+                    Datum: 2021.02.25
+                    Zeit: 14:02:05
+
+01303 - Sende- und Empfangsgerät für Telefon (R36) 
+            004 - kein Signal/Kommunikation
+             Umgebungsbedingungen:
+                    Fehlerstatus: 01100100
+                    Fehlerpriorität: 2
+                    Fehlerhäufigkeit: 1
+                    Verlernzähler: 47
+                    Kilometerstand: 172667 km
+                    Zeitangabe: 0
+                    Datum: 2021.02.25
+                    Zeit: 13:40:02
+
+01044 - Steuergerät falsch codiert 
+            000 - -
+             Umgebungsbedingungen:
+                    Fehlerstatus: 01100000
+                    Fehlerpriorität: 1
+                    Fehlerhäufigkeit: 254
+                    Verlernzähler: 255
+                    Kilometerstand: 172667 km
+                    Zeitangabe: 0
+                    Datum: 2021.02.25
+                    Zeit: 13:39:57
+
+
+-------------------------------------------------------------------------------
+Adresse 20: Fernlichtassistent (J844)       Labeldatei:. DRV\8K0-857-511.clb
+   Teilenummer SW: 5K0 857 511 B    HW: 8P0 857 511 C
+   Bauteil: FLA           H04 0006  
+   Revision: AA001002    
+   Codierung: 0101856B74745D545420363E00
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 25: Wegfahrsperre (J334)       Labeldatei:| DRV\5K0-920-xxx-25.clb
+   Teilenummer SW: 5K0 953 234     HW: 5K0 953 234 
+   Bauteil: IMMO          H04 0607  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 000000
+[PRIVATE_FIELD_REDACTED]
+   ASAM Datensatz: EV_Immo_UDS_VDD_RM09 A03009
+   ROD: EV_Immo_UDS_VDD_RM09_VW21.rod
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 37: Navigation
+nicht erreichbar
+
+-------------------------------------------------------------------------------
+Adresse 42: Türelektr. Fahrer        Labeldatei:. DRV\1K0-959-701-MAX3.clb
+   Teilenummer SW: 1T0 959 701 AA    HW: 1T0 959 701 AA
+   Bauteil: Tuer-SG         009 2121  
+   Codierung: 0004279
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 44: Lenkhilfe        Labeldatei: DRV\5N1-909-144.clb
+   Teilenummer SW: 5N1 909 144 M    HW: 5N1 909 148 G
+   Bauteil: J500__APA-BS KL.292 1002  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: 0000258
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 52: Türelektr. Beifahr.        Labeldatei:. DRV\1K0-959-702-MAX3.clb
+   Teilenummer SW: 1T0 959 702 S    HW: 1T0 959 702 S
+   Bauteil: Tuer-SG         009 2121  
+   Codierung: 0004535
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 56: Radio
+nicht erreichbar
+
+-------------------------------------------------------------------------------
+Adresse 61: Batterieregelung (J840)       Labeldatei:. DRV\1K0-907-534.clb
+   Teilenummer SW: 7N0 907 534     HW: 1K0 907 951 
+   Bauteil: Batt.regelung H43 1620  
+[PRIVATE_FIELD_REDACTED]
+   Codierung: E1200864
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 62: Türelektr. hi. li.        Labeldatei:. DRV\1K0-959-703-GEN3.clb
+   Teilenummer SW: 5K0 959 703 A    HW: 5K0 959 703 A
+   Bauteil: Tuer-SG         007 2104  
+   Codierung: 0000144
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 72: Türelektr. hi. re.        Labeldatei:. DRV\1K0-959-704-GEN3.clb
+   Teilenummer SW: 5K0 959 704 A    HW: 5K0 959 704 A
+   Bauteil: Tuer-SG         007 2104  
+   Codierung: 0000144
+[PRIVATE_FIELD_REDACTED]
+[PRIVATE_FIELD_REDACTED]
+
+Kein(e) Fehlercode(s) gefunden.
+
+-------------------------------------------------------------------------------
+Adresse 77: Telefon
+nicht erreichbar
+
+Ende--------(Dauer: 01:23, Batt.-Spannung Start/Ende: 12.2V/12.2V)---------

@@ -1,0 +1,136 @@
+;SW:5K0-907-044-ES   HW:5K0-907-044-ES ---  Klima-/Heizungsel.
+;Bauteil:Climatronic   H18 1112, Codierung:0000004002
+;EV_Climatronic,A01010,EV_ClimaAutoBasis_VW36.rod
+;Montag,05,Oktober,2026,13:45:20:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Beschreibung,Istwert
+IDE00019,Spannung Klemme 30,12.2, V
+IDE00021,Motordrehzahl,0, /min
+IDE00025,Kühlmitteltemperatur,33, °C
+IDE00075,Fahrzeuggeschwindigkeit,0, km/h
+IDE00198-ENG100282,Kältemitteldruck-MUX Kaeltemitteldruck,5.6, bar
+IDE00325,Diagnosemodus,VW - Diagnosemodus, 
+IDE00767,Anzahl unplanmäßiger ECU Resets,255, 
+IDE00965,Kompressorabschaltbedingung,AC-Taste aus, 
+IDE00966,Kompressorstrom: Istwert,0.000, A
+IDE00967,Kompressorstrom: Sollwert,0.000, A
+IDE00968,Kompressordrehzahl,0, /min
+IDE00969,Kompressorlast,0.0, Nm
+IDE00970-ENG103807,Kühlerlüfteransteuerung Istwert-MUX Lueftersteuerung,9.6, %
+IDE00971,Kühlerlüfteransteuerung: Sollwert,0.0, %
+IDE00972,Leerlaufdrehzahlanhebung,nicht aktiv, 
+IDE00973-ENG100004,Außentemperatur-MUX Temperatur,20.5, °C
+IDE00974-ENG100004,Außentemperatur intern berechnet-MUX Temperatur,20.5, °C
+IDE00976,Ausströmtemperatur vorn links,23.7, °C
+IDE00977,Ausströmtemperatur vorn rechts,23.7, °C
+IDE00979-ENG101755,Ausströmtemperatur Fußraum links-MUX Ausblastemperatur,24.3, °C
+IDE00980,Ausströmtemperatur Fußraum rechts,24.3, °C
+IDE00982-ENG103939,Temperatur nach Verdampfer-MUX Temperatur nach Verdampfer,19.3, °C
+IDE00983,Innentemperatur,29.0, °C
+IDE00984-ENG100238,Sonnenintensität links-MUX Insolation,0, W/m²
+IDE00985-ENG100238,Sonnenintensität rechts-MUX Insolation,0, W/m²
+IDE00987,Gebläsespannung: Sollwert,3.8, V
+IDE00988,Gebläselast vorn,8.4, %
+IDE00990-ENG103832,Dimmsignal-MUX Dimmungswert,0, %
+IDE00991,Fahrzeugderivat,MPV, 
+IDE00993-MAS00069,Status Eingangssignale 11-nicht belegt,aus, 
+IDE00993-MAS00069,Status Eingangssignale 11-nicht belegt,aus, 
+IDE00993-MAS00069,Status Eingangssignale 11-nicht belegt,aus, 
+IDE00993-MAS00069,Status Eingangssignale 11-nicht belegt,aus, 
+IDE00993-MAS00069,Status Eingangssignale 11-nicht belegt,aus, 
+IDE00993-MAS00069,Status Eingangssignale 11-nicht belegt,aus, 
+IDE00993-MAS00069,Status Eingangssignale 11-nicht belegt,aus, 
+IDE00993-MAS01277,Status Eingangssignale 11-Istwert Heckscheibenheizung,aus, 
+IDE00993-MAS01278,Status Eingangssignale 11-Sollwert Heckscheibenheizung,aus, 
+IDE00993-MAS01279,Status Eingangssignale 11-Istwert Zuheizer,aus, 
+IDE00993-MAS01280,Status Eingangssignale 11-Kühlmitteltemperaturanhebung,aus, 
+IDE00993-MAS01281,Status Eingangssignale 11-Rückfahrlicht,aus, 
+IDE00993-MAS01282,Status Eingangssignale 11-Wischer,aus, 
+IDE00993-MAS01283,Status Eingangssignale 11-Istwert Frontscheibenheizung,aus, 
+IDE00993-MAS01284,Status Eingangssignale 11-Sollwert Frontscheibenheizung,aus, 
+IDE00993-MAS01293,Status Eingangssignale 11-Sollwert Zuheizer,aus, 
+IDE00994,Frischluft/Umluft-Staudruckklappe Istwert,114, 
+IDE00995,Frischluft/Umluft-Staudruckklappe Sollwert,44.5, %
+IDE00996,Frischluft/Umluft-Staudruckklappe - Anschlag Frischluft,231, 
+IDE00997,Frischluft/Umluft-Staudruckklappe - Anschlag Umluft,24, 
+IDE00998,Temperaturklappe links - Istwert,30, 
+IDE00999,Temperaturklappe links - Sollwert,0.0, %
+IDE01040,Temperaturklappe links - Anschlag kalt,27, 
+IDE01041,Temperaturklappe links - Anschlag warm,227, 
+IDE01042,Temperaturklappe rechts - Istwert,30, 
+IDE01043,Temperaturklappe rechts - Sollwert,0.0, %
+IDE01044,Temperaturklappe rechts - Anschlag kalt,29, 
+IDE01045,Temperaturklappe rechts - Anschlag warm,227, 
+IDE01050,Luftverteilungsklappe vorn - Istwert,217, 
+IDE01051,Luftverteilungsklappe vorn - Sollwert,95.0, %
+IDE01052,Luftverteilungsklappe vorn - Anschlag Ausströmer,230, 
+IDE01053,Luftverteilungsklappe vorn - Anschlag Fußraum,24, 
+IDE01054,Defrostklappe - Istwert,63, 
+IDE01055,Defrostklappe - Sollwert,18.0, %
+IDE01056,Defrostklappe - Anschlag auf,230, 
+IDE01057,Defrostklappe - Anschlag zu,28, 
+IDE01058,Ländercodierung,Deutschland, 
+IDE01063,Status Umluft,Frischluft, 
+IDE01064,Sensor für Luftgüte: Status,Frischluft, 
+IDE01066,Verdeckstatus,zu, 
+IDE01076,Zeit seit Zündung aus,10, min
+IDE01084,Stellmotor der Klappe für indirekte Belüftung: Sollwert,0.0, %
+IDE01085,Stellmotor der Klappe für indirekte Belüftung: Anschlag auf,255, 
+IDE01086,Stellmotor der Klappe für indirekte Belüftung: Anschlag zu,255, 
+IDE01217,Stufe der Sitzheizung links,0, 
+IDE01218,Stufe der Sitzheizung rechts,0, 
+IDE01287-MAS01260,Zähler Kompressorabschaltungen-Abschaltung vom Motorsteuergerät über CAN,57872, 
+IDE01287-MAS01265,Zähler Kompressorabschaltungen-Drehzahlabschaltung,87, 
+IDE01310,Stellmotor der Klappe für indirekte Belüftung: Istwert,50, 
+IDE01419,Kompressorabschaltbedingung: letzte,Abschaltung durch Energiemanagement, 
+IDE01420,Kompressorabschaltbedingung: vorletzte,Abschaltung vom Motorsteuergerät über CAN, 
+IDE01421,Kompressorabschaltbedingung: drittletzte,Abschaltung vom Motorsteuergerät über CAN, 
+IDE02472,Klimabetriebsinfo,Kühl-Betrieb, 
+IDE02487,Stoppverbot Bedingungen Klima,Stoppfreigabe, 
+IDE02492,Start-Stopp-Funktion: Codierungsinformation,Start-Stopp-Funktion im Stg. nicht aktiv, 
+IDE03008,Stoppvorgang verhindert,Stoppfreigabe, 
+IDE03008,Stoppvorgang verhindert,Systemfehler, 
+IDE03009,Startvorgang angefordert,Stoppfreigabe, 
+IDE03009,Startvorgang angefordert,Systemfehler, 
+IDE03010-MAS02800,Anzahl verhinderter Stoppvorgänge-maximal kühlen eingestellt,0, 
+IDE03010-MAS02801,Anzahl verhinderter Stoppvorgänge-maximal heizen eingestellt,0, 
+IDE03010-MAS02802,Anzahl verhinderter Stoppvorgänge-Differenz Innenraumtemperatur zu Vorgaben,0, 
+IDE03010-MAS02803,Anzahl verhinderter Stoppvorgänge-Differenz Ausblastemperatur zu Vorgaben,0, 
+IDE03010-MAS02804,Anzahl verhinderter Stoppvorgänge-manuelle Gebläseerhöhung,0, 
+IDE03010-MAS02805,Anzahl verhinderter Stoppvorgänge-Beschlaggefahr (berechnet),0, 
+IDE03010-MAS04353,Anzahl verhinderter Stoppvorgänge-Beschlaggefahr (Luftfeuchtigkeitsgeber),0, 
+IDE03010-MAS04354,Anzahl verhinderter Stoppvorgänge-Innenraum Komfort-Feuchte zu hoch (Luftfeuchtigkeitsgeber),0, 
+IDE03010-MAS12897,Anzahl verhinderter Stoppvorgänge-Defrost aktiv / Frontscheibenheizung,0, 
+IDE03011-MAS02800,Anzahl angeforderter Startvorgänge-maximal kühlen eingestellt,0, 
+IDE03011-MAS02801,Anzahl angeforderter Startvorgänge-maximal heizen eingestellt,0, 
+IDE03011-MAS02802,Anzahl angeforderter Startvorgänge-Differenz Innenraumtemperatur zu Vorgaben,0, 
+IDE03011-MAS02803,Anzahl angeforderter Startvorgänge-Differenz Ausblastemperatur zu Vorgaben,0, 
+IDE03011-MAS02804,Anzahl angeforderter Startvorgänge-manuelle Gebläseerhöhung,0, 
+IDE03011-MAS02805,Anzahl angeforderter Startvorgänge-Beschlaggefahr (berechnet),0, 
+IDE03011-MAS04353,Anzahl angeforderter Startvorgänge-Beschlaggefahr (Luftfeuchtigkeitsgeber),0, 
+IDE03011-MAS04354,Anzahl angeforderter Startvorgänge-Innenraum Komfort-Feuchte zu hoch (Luftfeuchtigkeitsgeber),0, 
+IDE03011-MAS12897,Anzahl angeforderter Startvorgänge-Defrost aktiv / Frontscheibenheizung,0, 
+IDE03127-IDE03008,Verhinderte Stoppvorgänge (Ringspeicher)-Stoppvorgang verhindert,Messwert nicht verfügbar, 
+IDE03127-MAS00106,Verhinderte Stoppvorgänge (Ringspeicher)-Jahr,2127, 
+IDE03127-MAS00107,Verhinderte Stoppvorgänge (Ringspeicher)-Monat,15, 
+IDE03127-MAS00108,Verhinderte Stoppvorgänge (Ringspeicher)-Tag,31, 
+IDE03127-MAS00109,Verhinderte Stoppvorgänge (Ringspeicher)-Stunden,31, 
+IDE03127-MAS00110,Verhinderte Stoppvorgänge (Ringspeicher)-Minuten,63, 
+IDE03127-MAS00111,Verhinderte Stoppvorgänge (Ringspeicher)-Sekunden,63, 
+IDE03128-IDE03009,Angeforderte Startvorgänge (Ringspeicher)-Startvorgang angefordert,Messwert nicht verfügbar, 
+IDE03128-MAS00106,Angeforderte Startvorgänge (Ringspeicher)-Jahr,2127, 
+IDE03128-MAS00107,Angeforderte Startvorgänge (Ringspeicher)-Monat,15, 
+IDE03128-MAS00108,Angeforderte Startvorgänge (Ringspeicher)-Tag,31, 
+IDE03128-MAS00109,Angeforderte Startvorgänge (Ringspeicher)-Stunden,31, 
+IDE03128-MAS00110,Angeforderte Startvorgänge (Ringspeicher)-Minuten,63, 
+IDE03128-MAS00111,Angeforderte Startvorgänge (Ringspeicher)-Sekunden,63, 
+IDE03212,Start-Stopp-Bedingungen,Stoppfreigabe, 
+IDE03213,Start-Stopp-Freigabe,Systemfehler, 
+IDE03214,Motorstopp durch Start-Stopp-Funktion,nicht aktiv, 
+IDE03215,Motorstart durch Start-Stopp-Funktion,nicht aktiv, 
+IDE04312-IDE04095,Systemlaufzeit-Motorlaufzeit,0, s
+IDE04312-MAS00084,Systemlaufzeit-Klemme 15 ein,255, s
+
+Dauer: 00:07

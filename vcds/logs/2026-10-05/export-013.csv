@@ -1,0 +1,18 @@
+;SW:1T0-909-605-E   HW:1T0-909-605-E ---  Airbag
+;Bauteil:02 AIRBAG VW8   022 0100, Codierung:0012338
+;Montag,05,Oktober,2026,14:00:27:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,richtig, ,richtig, ,richtig, ,richtig, ,
+2,n. verbaut, ,n. verbaut, ,n. verbaut, ,n.v.,,
+3,richtig, ,n. verbaut, ,Gurt: NEIN, ,Gurt: JA, ,
+4,n. verbaut, ,n. verbaut, ,n. verbaut, ,n.v.,,
+5,richtig, ,richtig, ,n. verbaut, ,n. verbaut, ,
+6,n. verbaut, ,n. verbaut, ,n.v.,,n.v.,,
+7,richtig, ,richtig, ,n.v.,,n.v.,,
+10,aus, ,aus, ,aus, ,n.v.,,
+11,n. verbaut, ,n. verbaut, ,n. verbaut, ,n. verbaut, ,
+125,Kombi 1, ,n.v.,,n.v.,,n.v.,,
+225,0.0,(keine Einheit),n.v.,,n.v.,,n.v.,,

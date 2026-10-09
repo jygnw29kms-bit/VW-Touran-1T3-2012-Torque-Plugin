@@ -1,0 +1,143 @@
+;SW:3AA-919-475-L   HW:4H0-919-475-E ---  Einparkhilfe 2
+;Bauteil:PARKHILFE PLA H06 0025, Codierung:148001
+;EV_EPHVA2C000000000,002008,EV_EPHVA2C000000000.rod
+;Montag,05,Oktober,2026,14:00:12:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Beschreibung,Istwert
+IDE00018,Spannung Klemme 15,14.2, V
+IDE00075,Fahrzeuggeschwindigkeit,0.00, km/h
+IDE00323,Security Access: Anzahl ungültiger Schlüssel,0, 
+IDE00325,Diagnosemodus,VW - Diagnosemodus, 
+IDE00610-ENG104066,Time Out Erkennung-EMC Timeout Detection,|Steuergerät,Anzahl der Timeouts|Bremsenelektronik,0|Lenksäulenelektronik,0|Schalttafeleinsatz,0|Lenkhilfe,0|Diagnoseinterface für Datenbus,0|Feststellbremse,255|, 
+IDE00767,Anzahl unplanmäßiger ECU Resets,187, 
+IDE00957,Resultierender Abstand der vorderen Sensoren,unendlich, 
+IDE00958,Resultierender Abstand der hinteren Sensoren,unendlich, 
+IDE00973,Außentemperatur,21, °C
+IDE00974,Außentemperatur intern berechnet,21, °C
+IDE01122-MAS00988,Eingangssignale der Einparkhilfe-Rückwärtsgang,nein, 
+IDE01122-MAS01374,Eingangssignale der Einparkhilfe-Anhänger,nicht verbaut, 
+IDE01123,Abstand Geber für Einparkhilfe hinten links (HL),unendlich, 
+IDE01124,Abstand Geber für Einparkhilfe hinten links Mitte (HLM),unendlich, 
+IDE01125,Abstand Geber für Einparkhilfe hinten rechts Mitte (HRM),unendlich, 
+IDE01126,Abstand Geber für Einparkhilfe hinten rechts (HR),unendlich, 
+IDE01127,Abstand Geber für Einparkhilfe vorn links (VL),unendlich, 
+IDE01128,Abstand Geber für Einparkhilfe vorn links Mitte (VLM),unendlich, 
+IDE01129,Abstand Geber für Einparkhilfe vorn rechts Mitte (VRM),unendlich, 
+IDE01130,Abstand Geber für Einparkhilfe vorn rechts (VR),unendlich, 
+IDE01131,Ausschwingzeit Geber für Einparkhilfe hinten links (HL),0.000, ms
+IDE01132,Ausschwingzeit Geber für Einparkhilfe hinten links Mitte (HLM),0.000, ms
+IDE01133,Ausschwingzeit Geber für Einparkhilfe hinten rechts Mitte (HRM),0.000, ms
+IDE01134,Ausschwingzeit Geber für Einparkhilfe hinten rechts (HR),0.000, ms
+IDE01135,Ausschwingzeit Geber für Einparkhilfe vorn links (VL),0.000, ms
+IDE01136,Ausschwingzeit Geber für Einparkhilfe vorn links Mitte (VLM),0.000, ms
+IDE01137,Ausschwingzeit Geber für Einparkhilfe vorn rechts Mitte (VRM),0.000, ms
+IDE01138,Ausschwingzeit Geber für Einparkhilfe vorn rechts (VR),0.000, ms
+IDE01162-MAS01426,Werkseinstellung Lautstärke/Frequenzen für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe hinten,Stufe 9, 
+IDE01162-MAS01427,Werkseinstellung Lautstärke/Frequenzen für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe hinten,Stufe 4, 
+IDE01162-MAS01428,Werkseinstellung Lautstärke/Frequenzen für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe vorn,Stufe 9, 
+IDE01162-MAS01429,Werkseinstellung Lautstärke/Frequenzen für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe vorn,Stufe 6, 
+IDE01163,Tonausgabe für Einparkhilfe in Wählhebelstellung P,nicht verbaut, 
+IDE01164,Taster für Einparkhilfe,nicht betätigt, 
+IDE01165,Aktivierungston für Einparkhilfe,ein, 
+IDE01166,Versorgungsspannung Geber für Einparkhilfe,14.2, V
+IDE01167,Offset für Lautstärke Stufe 1 im Cabrio,15, 
+IDE01168,Schrittweite für Cabrio Lautstärkestufen,4, 
+IDE01169,Anforderung Audioabsenkung,ja, 
+IDE01170,Optische Anzeige für Einparkhilfe,Anzeige OPS, 
+IDE01171,Werkseinstellung Offset für Lautstärke Stufe 1 im Cabrio,nicht verbaut, 
+IDE01172,Werkseinstellung Schrittweite für Cabrio Lautstärkestufen,nicht verbaut, 
+IDE01173,Werkseinstellung Audioabsenkung,ja, 
+IDE01174,Werkseinstellung Optische Anzeige für Einparkhilfe,Anzeige OPS, 
+IDE01175,Abstand Geber für Einparkhilfe hinten links Seite (HLS),unendlich, 
+IDE01176,Abstand Geber für Einparkhilfe hinten rechts Seite (HRS),unendlich, 
+IDE01177,Ausschwingzeit Geber für Einparkhilfe hinten links Seite (HLS),0.000, ms
+IDE01178,Ausschwingzeit Geber für Einparkhilfe hinten rechts Seite (HRS),0.000, ms
+IDE01185,Abstand Geber für Einparkhilfe vorn links Seite (VLS),unendlich, 
+IDE01186,Abstand Geber für Einparkhilfe vorn rechts Seite (VRS),unendlich, 
+IDE01187,Ausschwingzeit Geber für Einparkhilfe vorn links Seite (VLS),0.000, ms
+IDE01188,Ausschwingzeit Geber für Einparkhilfe vorn rechts Seite (VRS),0.000, ms
+IDE01411-IDE01170,Personalisierung 1 für Einparkhilfe-Optische Anzeige für Einparkhilfe,Anzeige OPS, 
+IDE01411-MAS01426,Personalisierung 1 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe hinten,Stufe 9, 
+IDE01411-MAS01427,Personalisierung 1 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe hinten,Stufe 4, 
+IDE01411-MAS01428,Personalisierung 1 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe vorn,Stufe 9, 
+IDE01411-MAS01429,Personalisierung 1 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe vorn,Stufe 6, 
+IDE01411-MAS01431,Personalisierung 1 für Einparkhilfe-Fahrzeugschlüssel mit Funkfernbedienung,aktiv, 
+IDE01412-IDE01170,Personalisierung 2 für Einparkhilfe-Optische Anzeige für Einparkhilfe,Anzeige OPS, 
+IDE01412-MAS01426,Personalisierung 2 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe hinten,Stufe 9, 
+IDE01412-MAS01427,Personalisierung 2 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe hinten,Stufe 4, 
+IDE01412-MAS01428,Personalisierung 2 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe vorn,Stufe 9, 
+IDE01412-MAS01429,Personalisierung 2 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe vorn,Stufe 6, 
+IDE01412-MAS01431,Personalisierung 2 für Einparkhilfe-Fahrzeugschlüssel mit Funkfernbedienung,nicht aktiv, 
+IDE01413-IDE01170,Personalisierung 3 für Einparkhilfe-Optische Anzeige für Einparkhilfe,Anzeige OPS, 
+IDE01413-MAS01426,Personalisierung 3 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe hinten,Stufe 9, 
+IDE01413-MAS01427,Personalisierung 3 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe hinten,Stufe 4, 
+IDE01413-MAS01428,Personalisierung 3 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe vorn,Stufe 9, 
+IDE01413-MAS01429,Personalisierung 3 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe vorn,Stufe 6, 
+IDE01413-MAS01431,Personalisierung 3 für Einparkhilfe-Fahrzeugschlüssel mit Funkfernbedienung,nicht aktiv, 
+IDE01414-IDE01170,Personalisierung 4 für Einparkhilfe-Optische Anzeige für Einparkhilfe,Anzeige OPS, 
+IDE01414-MAS01426,Personalisierung 4 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe hinten,Stufe 9, 
+IDE01414-MAS01427,Personalisierung 4 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe hinten,Stufe 4, 
+IDE01414-MAS01428,Personalisierung 4 für Einparkhilfe-Lautstärke Lautsprecher für Einparkhilfe vorn,Stufe 9, 
+IDE01414-MAS01429,Personalisierung 4 für Einparkhilfe-Frequenz Lautsprecher für Einparkhilfe vorn,Stufe 6, 
+IDE01414-MAS01431,Personalisierung 4 für Einparkhilfe-Fahrzeugschlüssel mit Funkfernbedienung,nicht aktiv, 
+IDE01588,Fahrtrichtung,vorwärts, 
+IDE01632,Systemzustand der Einparkhilfe,nicht aktiv, 
+IDE01633,Ursache für Abschaltung der Einparkhilfe,Keine Abschaltbedingung, 
+IDE01943,Blinker,nicht betätigt, 
+IDE01965,Taster für Parklenkassistent,nicht betätigt, 
+IDE01966,Ursache für Abschaltung des Parklenkassistenten,Keine Abschaltbedingung, 
+IDE01967,Einparkseite,Rechts, 
+IDE02617,Systemstörung,nein, 
+IDE03683,Anforderung Lenkunterstützung,nein, 
+IDE03684,Fahrzeug Stillstand,ja, 
+IDE03783,Einschaltgeschwindigkeit für Parklenkassistent,37, km/h
+IDE03784,Temporäre Funktionseinschränkung durch Umwelteinflüsse,40, km/h
+MAS01426,Lautstärke Lautsprecher für Einparkhilfe hinten,Stufe 9, 
+MAS01427,Frequenz Lautsprecher für Einparkhilfe hinten,Stufe 4, 
+MAS01428,Lautstärke Lautsprecher für Einparkhilfe vorn,Stufe 9, 
+MAS01429,Frequenz Lautsprecher für Einparkhilfe vorn,Stufe 6, 
+MAS02980,Handlenkmoment,0.0, Nm
+ENG105237,Ausrichtung_BS_BF,nein, 
+ENG105238,Ausrichtung_BS_Fahrer,nein, 
+ENG105362,BS_BF_Alt,No, 
+ENG105363,BS_erkannt_BF,No, 
+ENG105364,BS_Erkannt_Fahrer,No, 
+ENG105365,BS_Erkannt_Fahrer_Alt,No, 
+ENG106720,Fzgx_Max,1500.0, cm
+ENG106721,Fzgy_Max,410.0, cm
+ENG107328,L_Min,219.4, cm
+ENG107330,L_Rangier,60.9, cm
+ENG108155,Parking_Aid_Senders_Cutoff_Time,30, s
+ENG108195,PL_Länge_BF,0.0, cm
+ENG108196,PL_Länge_BF_Alt,0.0, cm
+ENG108197,PL_Länge_Fahrer,0.0, cm
+ENG108198,PL_Länge_Fahrer_Alt,0.0, cm
+ENG108199,PL_Tiefe_BF,0.0, cm
+ENG108200,PL_Tiefe_BF_Alt,0.0, cm
+ENG108201,PL_Tiefe_Fahrer,0.0, cm
+ENG108202,PL_Tiefe_Fahrer_Alt,0.0, cm
+ENG108329,Psi0_BF,0.00, °
+ENG108330,Psi0_BF_Alt,0.00, °
+ENG108331,Psi0_Fahrer,0.00, °
+ENG108332,Psi0_Fahrer_Alt,0.00, °
+ENG109009,Speed_Limit_Power_Steering,7, km/h
+ENG109117,Steering_Angle_Actual_Value,-9.3, °
+ENG109118,Steering_Angle_Nominal_Value,-10.5, °
+ENG109301,T_Min,0.0, cm
+ENG109901,Visual_Indication_PLA,nein, 
+ENG110295,X0_BF,0.0, cm
+ENG110296,X0_BF_Alt,0.0, cm
+ENG110297,X0_Fahrer,0.0, cm
+ENG110298,X0_Fahrer_Alt,0.0, cm
+ENG110299,Xa_BF_Alt,-83.7, cm
+ENG110300,Xa_Fahrer_Alt,-83.7, cm
+ENG110301,Y0_BF,0.0, cm
+ENG110302,Y0_BF_Alt,0.0, cm
+ENG110303,Y0_Fahrer,0.0, cm
+ENG110304,Y0_Fahrer_Alt,0.0, cm
+ENG110305,Ya_BF_Alt,-89.7, cm
+ENG110306,Ya_Fahrer_Alt,-89.7, cm
+
+Dauer: 00:11

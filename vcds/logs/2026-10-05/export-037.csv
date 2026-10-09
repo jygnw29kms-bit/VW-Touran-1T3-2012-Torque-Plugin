@@ -1,0 +1,45 @@
+;33-OBD2
+;Montag,05,Oktober,2026,14:05:21:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+03,Status Kraftstoffsystem 1/2,Regelkreis geschlossen,,benutze Lambdasonden,Motor AUS
+04,Errechnete Motorlast,16.5 %
+05,Motorkühlmitteltemperatur,63 °C
+06,Kurzzeit-Gemischadpt. Bank 1,0.8 %
+07,Langzeit-Gemischadpt. Bank 1,-10.9 %
+0B,Saugrohrdruck,34 kPa abs
+0C,Motordrehzahl,702 /min
+0D,Fahrzeuggeschwindigkeit,0 km/h
+0E,Zündzeitpunkt-Voreilung Zyl. 1,2.0 Grad
+0F,Ansauglufttemperatur,25 °C
+11,Drosselklappenposition,11.8 %
+13,Einbauort der Lambdasonden,B1S1 B1S2 
+15,Status Bank 1 Sonde 2,0.460 V
+1C,Erfüllte OBD-Anforderung,Euro-OBD
+1F,Zeit seit Motorstart,561 s
+21,Strecke mit Abgaswarnl. EIN,0 km
+23,Kraftstoffdruck (rel.),4870 kPa rel
+2E,Tankentlüftung-Ansteuerung,3.9 %
+30,Warmlaufzyklen seit Löschung Fehlercodes,123
+31,Fahrtstrecke seit Löschung Fehlercodes,1580 km
+33,Umgebungsdruck,101 kPa abs
+34,Status Bank 1 Sonde 1,0.999 Lambda,-0.004 mA
+3C,B1S1 Kat.-Temp.,196.1 °C
+42,Steuergerätspannung,14.041 V
+43,Absolute Motorlast,24 %
+44,Eingestellter Lambdafaktor,1.000 Lambda
+45,Relative Drosselklappenposition,2.0 %
+46,Umgebungstemperatur,21 °C
+47,Drosselklappenposition B,12 %
+49,Gaspedalposition D,13.7 %
+4A,Gaspedalposition E,14.9 %
+4C,Drosselklappenansteuerung,2.7 %
+56,Lang Dauer sek. Lambdaabgleich Bank 1/3,0.0 %
+
+Modus 9: Fahrzeuginformationen
+Typ 02 - Fahrzeug-Ident.-Nummer : [VIN_REDACTED] (Adresse E8)
+Typ 04 - Kalibierungs-ID : 03C906027CR 1669 (Adresse E8)
+Typ 06 - Kalibrierungs-Prüfnummer: 2D791B5D (Adresse E8)
+Typ 0A - Steuergerätname : ECM-Engine Control (Adresse E8)
+

@@ -1,0 +1,13 @@
+;SW:5K0-857-511-B   HW:8P0-857-511-C ---  Fernlichtassistent
+;Bauteil:FLA           H04 0006, Codierung:0101856B74745D545420363E00
+;Montag,05,Oktober,2026,14:01:08:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,14.10 V,,0x0000,,0.0 %,,unbetätigt,,
+2,38.0°C,,Rückw. AUS,,Licht EIN,,n.v.,,
+3,ein,,gesperrt,,n.v.,,n.v.,,
+16,0x0014,,aktiv,,aus,,0.0 %,,
+17,Frei,,n.v.,,n.v.,,n.v.,,
+125,Gateway 1,,Zentral 1,,ABS 1,,n.v.,,

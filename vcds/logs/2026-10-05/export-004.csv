@@ -1,0 +1,32 @@
+;SW:1K0-907-379-BJ   HW:1K0-907-379-BJ ---  Bremsenelektronik
+;Bauteil:ESP MK60EC1   H31 0121, Codierung:323B401609250E014C1302E790197040310150
+;Montag,05,Oktober,2026,13:44:44:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,0.0 km/h,,0.0 km/h,,0.0 km/h,,0.0 km/h,,
+2, ,, ,, ,,betätigt,,
+3,unbetätigt,,ein,,ein,,ein,,
+4,-10.98°,,0.04 m/s^2,,0.97°/s,,n.v.,,
+5,-0.07 bar,,Lenkwi Initia,,n.v.,,n.v.,,
+6,-0.389 m/s^2,,11.93 V,,0.00 V,,n.v.,,
+7,unbetätigt,,n.v.,,n.v.,,n.v.,,
+10,n. definiert,,aus,,AUF,,Rückw. nein,,
+11,0,,0,,0,,n.v.,,
+12,0,,0,,0,,n.v.,,
+13,0,,0,,0,,n.v.,,
+14,0,,0,,0,,n.v.,,
+53, ,, ,,aus,,aus,,
+113,gültig,,0,,ungültig,,rückwärts,,
+114,gültig,,0,,ungültig,,rückwärts,,
+125,Motor 1,,Lenkwink. 1,,n.v.,,n.v.,,
+126,Kombi 1,,Gateway 1,,WFS 1,,Lenkung 1,,
+127,Airbag 1,,Parklenkas 1,,n.v.,,n.v.,,
+210,ungültig,,ungültig,,ungültig,,ungültig,,
+211,  0h 55min 48s,,
+225,0.0,,0.0,,n.v.,,n.v.,,
+226,0.0,,0.0,,0.0,,1.0,,
+227,0.0,,0.0,,n.v.,,n.v.,,
+240,ungültig,,ungültig,,ungültig,,ungültig,,
+241,1,,2,,n.v.,,n.v.,,

@@ -1,0 +1,36 @@
+;SW:7N0-907-530-J   HW:1K0-907-951 ---  Diagnoseinterface
+;Bauteil:J533  Gateway H43 1620, Codierung:358002
+;Montag,05,Oktober,2026,13:57:14:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,aktiv,, ,, ,, ,,
+2,207.0,,deaktiviert,,50.0,, ,,
+3, ,,deaktiviert,,2.0,, ,,
+6,0.0,,0.0,,4.0,,0.0,,
+7,0.0,,0.0,,0.0,,00:00,,
+8,0.0,,8.0,,204,,0.0,,
+11,6.0,, ,, ,, ,,
+125,Motor 1,, ,,ABS 1,,Kombi 1,,
+126,Lenkwink. 1,,Airbag 1,,Lenkung 1,, ,,
+127, ,, ,,WFS 1,, ,,
+128, ,,Parklenkas 1,, ,, ,,
+129, ,, ,, ,,Fernl.ass. 1,,
+130,Zweidraht,,Elektr. ZE 1,,Zentral 1,,F-Tür 1,,
+131,BF-Tür 1,,Tür hl 1,,Tür hr 1,, ,,
+132, ,,Lenkrad 1,,Klima 1,, ,,
+135,WFS 0,, ,, ,, ,,
+136, ,, ,,Generator 1,, ,,
+140,Zweidraht,, ,, ,, ,,
+141, ,, ,,Radio Sl.Ind,,Telefon 0,,
+200, ,,13.94 V,,13.94 V,, ,,
+201,1.0,,0.0,,aktiviert,,aktiviert,,
+203,1.0,, ,, ,, ,,
+204,0.0,,0.0,, ,, ,,
+225,0.0,,0.0,,0.0,,0.0,,
+226,0.0,,0.0,,0.0,,0.0,,
+227,0.0,,0.0,,0.0,,0.0,,
+228,0.0,,0.0,,0.0,,0.0,,
+229,0.0,,0.0,,0.0,,0.0,,
+230,0.0,, ,, ,, ,,

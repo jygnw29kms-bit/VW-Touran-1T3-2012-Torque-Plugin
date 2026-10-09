@@ -1,0 +1,30 @@
+;SW:5N1-909-144-M   HW:5N1-909-148-G ---  Lenkhilfe
+;Bauteil:J500__APA-BS KL.292 1002, Codierung:0000258
+;Montag,05,Oktober,2026,14:02:18:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,20.0°C,,20.0°C,,21.0°C,,20.0°C,,
+2,14.00 V,,14.00 V,,7.00 V,,0,,
+3,0.0 km/h,,Kl.15 EIN,,701 /min,,nicht belegt,,
+4,-6401,,12623,,6662,,7.0,,
+5,0.0 Nm,,0.0 Nm,,0.0 Nm,,100.00 %,,
+6,0,,0.00°,,0,,0,,
+7,-9.49°,,0.0°/s,,Ja,,0,,
+8,00000000 00000011,,00000000 00000000,,292,,Normal 2,,
+9,0.0 Nm,,0.0 Nm,,0.0 Nm,,i.O.,,
+10,-9.32°,,223.74°,,i.O.,,0,,
+11,0.26°,,0.00°,,0.26°,,3,,
+60,0x0000,,0,,0,,nicht belegt,,
+61,0x0000,,0,,0,,nicht belegt,,
+62,0x0000,,0,,0,,nicht belegt,,
+63,0x0000,,0,,0,,nicht belegt,,
+64,0x0000,,0,,0,,nicht belegt,,
+65,0x0000,,0,,0,,nicht belegt,,
+66,0x0000,,0,,0,,nicht belegt,,
+67,0x0000,,0,,0,,nicht belegt,,
+68,0x0000,,0,,0,,nicht belegt,,
+69,0x0000,,0,,0,,nicht belegt,,
+125,Motor 1,,ABS 1,,Kombi 1,,nicht belegt,,
+126,Gateway 1,,Parklenkas 1,,Lenkwink. 1,,Spurhalteas 1,,

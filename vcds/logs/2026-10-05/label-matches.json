@@ -1,0 +1,155 @@
+[
+  {
+    "address": "01",
+    "label_reported_by_scan": "DRV\\03C-906-027-CAV.clb",
+    "archive_path": "Labels/DRV/03C-906-027-CAV.clb",
+    "archive_sha256": "8ef21c09e46bcd98df03aa29b1d6682bd554100ad4cbf88e4d2fbeccc9c3bcbe",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "03",
+    "label_reported_by_scan": "DRV\\1K0-907-379-60EC1F.clb",
+    "archive_path": null,
+    "archive_sha256": null,
+    "status": "not_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "08",
+    "label_reported_by_scan": "DRV\\5K0-907-044.clb",
+    "archive_path": "Labels/DRV/5K0-907-044.clb",
+    "archive_sha256": "ae2f1799609ce2250e87f74f9a906c08dfc540b97b8a22f716dba229280a33f3",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "09",
+    "label_reported_by_scan": "DRV\\1K0-937-08x-09.clb",
+    "archive_path": "Labels/DRV/1K0-937-08x-09.clb",
+    "archive_sha256": "d91bf81460ca98769d7d14976d56c040de7ddaf2984b38fe5927a3351142580c",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "10",
+    "label_reported_by_scan": "DRV\\3AA-919-475.clb",
+    "archive_path": "Labels/DRV/3AA-919-475.clb",
+    "archive_sha256": "4dfb4c8363a36fe4802290dd24a1c571c1ee691ca27643960209271accaed9a9",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "15",
+    "label_reported_by_scan": "DRV\\1T0-909-605.lbl",
+    "archive_path": "Labels/DRV/1T0-909-605.lbl",
+    "archive_sha256": "9269548a31addab4bb6202468c0d1c336b2d37c83c7edb78a20641a8b0c3d573",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": true,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "16",
+    "label_reported_by_scan": "DRV\\5K0-953-569.clb",
+    "archive_path": "Labels/DRV/5K0-953-569.clb",
+    "archive_sha256": "e4bf75095f2f52d1f278c5779d06edb8b361f346b760f02bd2044d3809bf0dba",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "17",
+    "label_reported_by_scan": "DRV\\5K0-920-xxx-17.clb-SRI1",
+    "archive_path": "Labels/DRV/5K0-920-xxx-17.clb",
+    "archive_sha256": "6d2bdff208024d3c206f5a0935a1974917b21c46f570353181e19379f265b005",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "19",
+    "label_reported_by_scan": "DRV\\7N0-907-530-V2.clb",
+    "archive_path": "Labels/DRV/7N0-907-530-V2.clb",
+    "archive_sha256": "51113266910c5f6c70216b1029fc7d3b02ab07a23cabe95200f788f50c6a7be1",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "20",
+    "label_reported_by_scan": "DRV\\8K0-857-511.clb",
+    "archive_path": "Labels/DRV/8K0-857-511.clb",
+    "archive_sha256": "b7325ce7383c0cdd2445c4c134dd290cd08fe7edc3a63aec4b63540a3e99dc23",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "25",
+    "label_reported_by_scan": "DRV\\5K0-920-xxx-25.clb",
+    "archive_path": "Labels/DRV/5K0-920-xxx-25.clb",
+    "archive_sha256": "dd40b96f919501989ae30272be84db4e17a9d69cc4d22e3037068dc48d78ba7a",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "42",
+    "label_reported_by_scan": "DRV\\1K0-959-701-MAX3.clb",
+    "archive_path": "Labels/DRV/1K0-959-701-MAX3.clb",
+    "archive_sha256": "21c0c5cdbd44fb71f7d5578348c6b3f96b0b41895d2a74378c6c8d41b773a32d",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "44",
+    "label_reported_by_scan": "DRV\\5N1-909-144.clb",
+    "archive_path": "Labels/DRV/5N1-909-144.clb",
+    "archive_sha256": "a55285b62067242d508d6fd6ef64bb1645ec25e3909e553aea513c2963814f49",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "52",
+    "label_reported_by_scan": "DRV\\1K0-959-702-MAX3.clb",
+    "archive_path": "Labels/DRV/1K0-959-702-MAX3.clb",
+    "archive_sha256": "7bea5055f3d428736028c1431ed3b32273e780654875c1483b860b0f543580c5",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "61",
+    "label_reported_by_scan": "DRV\\1K0-907-534.clb",
+    "archive_path": "Labels/DRV/1K0-907-534.clb",
+    "archive_sha256": "4a23bd4de7eee51a960102295c85a8c0b2479eadda288c75c5ae0c98f6360400",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "62",
+    "label_reported_by_scan": "DRV\\1K0-959-703-GEN3.clb",
+    "archive_path": "Labels/DRV/1K0-959-703-GEN3.clb",
+    "archive_sha256": "0ce4e6795b3a8e926c1e8dabfe7ef81ad44068f5285b4bd2f9b22f517da93863",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  },
+  {
+    "address": "72",
+    "label_reported_by_scan": "DRV\\1K0-959-704-GEN3.clb",
+    "archive_path": "Labels/DRV/1K0-959-704-GEN3.clb",
+    "archive_sha256": "653b2738deb41280430591fb1d9ef128266de0d3a8ef6f501c410a29e721daa6",
+    "status": "scan_label_found_in_supplied_archive",
+    "content_decoded": false,
+    "caveat": "Filename identity does not establish the archive version used by VCDS."
+  }
+]

@@ -2,6 +2,8 @@
 
 Place real exports from the target Touran here during validation.
 
+German collection guide and Windows export collector: [VCDS-Datensammlung](../docs/vcds-datensammlung.md).
+
 Recommended files:
 - VCDS Auto-Scan
 - 01-Engine controller channel map / measuring value map

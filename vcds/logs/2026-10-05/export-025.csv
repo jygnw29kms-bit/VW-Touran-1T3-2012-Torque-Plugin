@@ -1,0 +1,18 @@
+;SW:1T0-959-701-AA   HW:1T0-959-701-AA ---  Türelektr. Fahrer
+;Bauteil:Tuer-SG         009 2121, Codierung:0004279
+;Montag,05,Oktober,2026,14:01:45:16365
+;VCDS Version: PCI 23.11.0  Datenstand: 20240306 DS351.0
+[PRIVATE_FIELD_REDACTED]
+
+Block,Feld 1,Datentyp,Feld 2,Datentyp,Feld 3,Datentyp,Feld 4,Datentyp,
+1,unbetätigt,,unbetätigt,,Endanschl.gel,,inaktiv,,
+2,unbetätigt,,Ja,,0.0 %,,0.0 km/h,,
+3,14.27 V,,Zweidraht,,Kl.15 EIN,,betätigt,,
+4,0.0 %,,aktiviert,,n. verbaut,,0.0 %,,
+5,entriegelt,,Tür auf,,unbetätigt,,unbetätigt,,
+6,ein,,inaktiv,,inaktiv,,unbetätigt,,
+7,unbetätigt,,n. verbaut,,n. verbaut,,n. verbaut,,
+8,inaktiv,,n. verbaut,,n. verbaut,,n.v.,,
+9,unbetätigt,,unbetätigt,,unbetätigt,,n. verbaut,,
+10,unbetätigt,,unbetätigt,,unbetätigt,,unbetätigt,,
+80,KO1-KLO 30.07.11 00009000 0001 1126,,
