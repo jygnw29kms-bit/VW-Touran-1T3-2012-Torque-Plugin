@@ -1,18 +1,63 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Touran Live - Android</title>
-<style>
-body{margin:0;background:#05070a;color:#fff;font-family:Arial,Helvetica,sans-serif}.wrap{max-width:900px;margin:auto;padding:32px}.card{background:#101820;border:1px solid #17324d;border-radius:18px;padding:24px;box-shadow:0 0 30px rgba(0,128,255,.15)}h1{margin:0 0 8px;font-size:34px}p{color:#b8c7d9;line-height:1.5}.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#0a2740;color:#67b8ff;margin:8px 8px 16px 0}.btn{display:inline-block;margin-top:16px;padding:16px 22px;border-radius:12px;background:#0878d8;color:white;text-decoration:none;font-weight:bold;font-size:18px}.small{font-size:14px;color:#8193a6;margin-top:18px}.changes{margin-top:20px;padding-top:16px;border-top:1px solid #253543;color:#aebed0;line-height:1.55}.changes strong{color:#fff}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090c10">
+  <meta name="description" content="135er Touran Live: die Android-App für den VW Touran 1T3. Tacho, ESP32-CAN-Logger und eine Diagnoseentwicklung auf Basis echter VCDS-Daten.">
+  <title>135er Touran · Touran Live</title>
+  <link rel="icon" type="image/webp" href="assets/touran-live-icon.webp">
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="assets/site.js" defer></script>
 </head>
-<body><div class="wrap"><div class="card">
-<h1>Touran Live</h1>
-<div class="badge">VW Touran 1T3</div><div class="badge">2012</div><div class="badge">CAVC</div><div class="badge">Erisin ES359 / ELM327</div>
-<p>Aktueller Testbuild fuer den Touran. Die App verbindet sich automatisch per Bluetooth mit dem gekoppelten OBDII-Adapter und zeigt ausschliesslich Werte an, die vom Fahrzeug tatsaechlich beantwortet werden. Keine Demo- oder Dummywerte.</p>
-<a class="btn" href="TouranLive-debug.apk" download>Aktuelle APK herunterladen (v0.6.1)</a>
-<p class="small">Aktuelle Version: 0.6.1 &middot; versionCode 23 &middot; Android ab 8.0 &middot; Zuendung einschalten, ES359 einstecken und zuvor mit &quot;OBDII&quot; koppeln.</p>
-<div class="changes"><strong>0.6.1:</strong> Auto-Connect-Supervisor, robuster ES359/ELM327-SPP-Verbindungsaufbau, automatische Wiederverbindung, Datenstrom-Watchdog gegen eingefrorene Werte, optimiertes PID-Sampling, Oeltemperatur-PID 5C mit VAG-Fallback, verbesserte Ladedruck-Initialisierung, persistente Tageslogs und In-App-Updates.</div>
-</div></div></body></html>
+<body>
+  <a class="skip" href="#inhalt">Zum Inhalt</a>
+  <header class="header">
+    <a class="brand" href="#" aria-label="135er Touran Startseite"><span class="brand-mark">135</span><span>135er <strong>TOURAN</strong></span></a>
+    <nav aria-label="Hauptnavigation"><a href="#ansichten">App-Ansichten</a><a href="#funktionen">Funktionen</a><a href="#start">Loslegen</a><a class="nav-download" href="#download">Download <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="inhalt">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="dot"></span> Ein Touran. Ein eigenes Projekt.</p>
+        <h1 id="hero-title">Dein Touran.<br>Seine Daten.<br><em>Dein Cockpit.</em></h1>
+        <p class="intro">Touran Live bringt Fahrzeugansicht und CAN-Aufzeichnung auf das Android-Radio. Entwickelt am 135er Touran – mit echten Steuergerätekennungen und VCDS-Referenzdaten.</p>
+        <div class="hero-actions"><a class="button primary" href="#ansichten">Die App ansehen <span aria-hidden="true">↗</span></a><a class="button secondary" href="https://github.com/jygnw29kms-bit/135er-Touran">Zum Projekt <span aria-hidden="true">↗</span></a></div>
+        <div class="vehicle-tags"><span>Touran 1T3 · 2012</span><span>1.4 TSI · CAVC</span><span>103 kW / 140 PS</span></div>
+      </div>
+      <div class="hero-visual">
+        <div class="visual-top"><img src="assets/touran-live-icon.webp" alt="Touran-Live-App-Motiv mit einem schwarzen Touran und Instrumenten" width="192" height="192"><div><span class="eyebrow">135er Touran Live</span><p>Für dein Android-Cockpit.</p><span class="small muted">Android ab 8.0 · Querformat</span></div></div>
+        <div class="radio-frame"><img src="assets/app-tacho.svg" alt="Nachgebildete Tachoansicht mit Drehzahl, Geschwindigkeit und mittlerer MFA-Anzeige. Ohne Verbindung stehen Messwerte auf Strich." width="1024" height="600" fetchpriority="high"></div>
+        <p class="visual-caption"><span class="status-pill">Entwicklung 0.7.1</span><span>Oberflächen-Vorschau · keine Fahrzeugmessung</span></p>
+      </div>
+    </section>
+    <div class="spec-bar"><div class="wrap spec-grid"><div><span>Fahrzeug</span><strong>VW Touran 1T3</strong></div><div><span>Motorsteuergerät</span><strong>MED17.5.5 · CAVC</strong></div><div><span>Projekt-Verbindung</span><strong>ESP32 · WLAN / CAN</strong></div><div><span>Referenz</span><strong>VCDS-Aufnahme 05.10.2026</strong></div></div></div>
+    <section class="wrap section" id="ansichten" aria-labelledby="ansichten-title">
+      <div class="section-head"><div><p class="eyebrow">Auf einen Blick</p><h2 id="ansichten-title">Die App im Cockpit.</h2></div><p>Große Anzeigen, kurze Wege und ein klarer Verbindungsstatus. Antippe eine Ansicht, um sie zu vergrößern.</p></div>
+      <div class="gallery">
+        <figure class="screen-card"><button class="image-button" type="button" data-image="assets/app-tacho.svg" data-title="Tacho · Oberflächen-Vorschau" aria-label="Tacho-Vorschau vergrößern"><img src="assets/app-tacho.svg" alt="Tacho-Vorschau mit Rundinstrumenten und MFA-Seite" width="1024" height="600" loading="lazy"><span class="zoom" aria-hidden="true">↗</span></button><figcaption><span class="card-number">01</span><div><h3>Tacho &amp; MFA</h3><p>Drehzahl, Geschwindigkeit und vier wechselbare MFA-Seiten. Fehlende oder veraltete Werte bleiben erkennbar.</p></div></figcaption></figure>
+        <figure class="screen-card"><button class="image-button" type="button" data-image="assets/app-live.svg" data-title="Live · Oberflächen-Vorschau" aria-label="Live-Vorschau vergrößern"><img src="assets/app-live.svg" alt="Live-Vorschau ohne aktuelle Werte bei getrenntem Gateway" width="1024" height="600" loading="lazy"><span class="zoom" aria-hidden="true">↗</span></button><figcaption><span class="card-number">02</span><div><h3>Livewerte</h3><p>Aktuelle Werte mit Einheit, sobald das Gateway bestätigte dekodierte Signale liefert. Verbindungsaufbau direkt in der Ansicht.</p></div></figcaption></figure>
+        <figure class="screen-card"><button class="image-button" type="button" data-image="assets/app-logger.svg" data-title="Logger · Oberflächen-Vorschau" aria-label="Logger-Vorschau vergrößern"><img src="assets/app-logger.svg" alt="Logger-Vorschau mit Export, Upload und Gateway-Status" width="1024" height="600" loading="lazy"><span class="zoom" aria-hidden="true">↗</span></button><figcaption><span class="card-number">03</span><div><h3>Logger</h3><p>Systemmeldungen und rohe CAN-Frames sammeln, lokal exportieren oder an den Projektserver übermitteln.</p></div></figcaption></figure>
+      </div>
+      <p class="image-note">Die Bilder sind nachgebildete Oberflächen des Entwicklungsstands 0.7.1, keine Screenshots eines laufenden Radios. Das Touran-Motiv stammt aus dem vorhandenen App-Icon. Es werden keine Messdaten simuliert.</p>
+    </section>
+    <section class="feature-section" id="funktionen" aria-labelledby="funktionen-title"><div class="wrap section">
+      <div class="section-head"><div><p class="eyebrow">Was dahintersteckt</p><h2 id="funktionen-title">Mehr Übersicht.<br>Nachvollziehbare Daten.</h2></div><p>Die App verbindet das Cockpit mit der Entwicklungsarbeit am Fahrzeug. Jeder Wert braucht eine belegte Quelle.</p></div>
+      <div class="features">
+        <article><span class="feature-icon" aria-hidden="true">◉</span><h3>Fahrzeugansicht</h3><p>Große Rundinstrumente und MFA-Seiten für Motor, Temperaturen, Gemisch und weitere Signale. Bedienung im Querformat auf dem Android-Radio.</p></article>
+        <article><span class="feature-icon" aria-hidden="true">⌁</span><h3>Gateway-Verbindung</h3><p>WLAN-Verbindung zum ESP32-S3-CAN-2CH-U. Verbindungsstatus, Gateway-Gesundheit und Wiederverbindung helfen bei der Aufnahme.</p></article>
+        <article><span class="feature-icon" aria-hidden="true">≋</span><h3>CAN-Aufzeichnung</h3><p>Rohe Frames beider CAN-Kanäle mit Zeitstempel, Identifier und Nutzdaten. Grundlage für die Prüfung fahrzeugspezifischer Signale.</p></article>
+        <article><span class="feature-icon" aria-hidden="true">↗</span><h3>Export &amp; Upload</h3><p>Logs über die Android-Dateiauswahl speichern. Bei Internetverbindung überträgt die App Log-Schnappschüsse automatisch an den Projektserver. Manueller Upload ist ebenfalls möglich; fehlgeschlagene Übertragungen bleiben in der Warteschlange.</p></article>
+        <article><span class="feature-icon" aria-hidden="true">▤</span><h3>VCDS als Referenz</h3><p>Auto-Scan und Messwert-Maps des tatsächlichen Tourans sichern die Steuergerätezuordnung. Die Projektanleitung erklärt die Datensammlung Schritt für Schritt.</p></article>
+        <article><span class="feature-icon" aria-hidden="true">⊞</span><h3>Apps &amp; Systemcheck</h3><p>Installierte Radio-, Telefon-, Navigations- und CarPlay-Apps öffnen, soweit verfügbar. Der Systemcheck hilft beim Prüfen von Netzwerk und Berechtigungen.</p></article>
+      </div>
+      <div class="state-panel"><div><span class="status-pill">Aktueller Entwicklungsstand</span><h3>Aufzeichnung funktioniert.<br>Vollständige Diagnose entsteht.</h3></div><div><p>Die aktuelle ESP32-Firmware liefert Status und rohe CAN-Frames. Sie stellt noch keine bestätigten dekodierten Fahrzeugwerte bereit und führt noch keinen vollständigen Steuergeräte-Scan aus. Die Liveanzeigen können deshalb trotz Verbindung leer bleiben.</p><p>Öltemperatur ist in den VCDS-Daten des Kombiinstruments als <strong>IDE00196</strong> belegt. Für die eigene App müssen Diagnosekommunikation und Datendekodierung noch validiert werden. „Nicht geprüft“ bedeutet nicht „fehlerfrei“.</p></div></div>
+    </div></section>
+    <section class="wrap section vehicle-section" aria-labelledby="vehicle-title"><div><p class="eyebrow">Das Referenzfahrzeug</p><h2 id="vehicle-title">Entwickelt an<br>diesem Touran.</h2><p>Touran 1T3, Modelljahr 2012: 1.4 TSI mit CAVC-Motor, 140 PS und KWB-Handschaltgetriebe. Die Software orientiert sich an seinen tatsächlichen Steuergeräten und der vorhandenen Ausstattung.</p><a class="text-link" href="https://github.com/jygnw29kms-bit/135er-Touran/blob/main/docs/touran-vcds-2026-10-05.md">VCDS-Auswertung im Projekt ansehen <span aria-hidden="true">↗</span></a></div><div class="reference-grid"><div><strong>17</strong><span>erreichbare Hauptmodule<br>in der VCDS-Aufnahme</span></div><div><strong>36</strong><span>Messwert-Exporte<br>als Referenzdaten</span></div><div><strong>33</strong><span>OBD-PIDs<br>in den Exporten beobachtet</span></div><div><strong>1T3</strong><span>Ein konkretes Fahrzeug.<br>Keine pauschalen Zuordnungen.</span></div></div></section>
+    <section class="wrap section" id="start" aria-labelledby="start-title"><div class="section-head"><div><p class="eyebrow">Der Einstieg</p><h2 id="start-title">So geht es los.</h2></div><p>Die neue ESP32-Entwicklung und die ältere öffentliche APK verwenden unterschiedliche Verbindungen. Wähle die Anleitung passend zur Version.</p></div><ol class="steps"><li><span>01</span><h3>Version prüfen</h3><p>Die öffentliche Downloadversion steht unten. Der hier gezeigte ESP32-Entwicklungsstand ist 0.7.1.</p></li><li><span>02</span><h3>Passende Hardware nutzen</h3><p>Für den ESP32-Pfad: Android ab 8.0, WLAN und das konfigurierte CAN-Gateway. Die ältere 0.6.1 nutzt Bluetooth/ELM327.</p></li><li><span>03</span><h3>Verbinden &amp; prüfen</h3><p>Im Stand Verbindung und Gateway-Status prüfen. Noch nicht dekodierte Werte bleiben leer; Rohdaten können im Logger ankommen.</p></li><li><span>04</span><h3>Aufnahmen sichern</h3><p>Logs exportieren und mit den VCDS-Referenzdaten vergleichen. Die Datensammlungsanleitung ist im Repository hinterlegt.</p></li></ol><a class="text-link" href="https://github.com/jygnw29kms-bit/135er-Touran/blob/main/docs/vcds-datensammlung.md">Zur VCDS-Anleitung <span aria-hidden="true">↗</span></a></section>
+    <section class="wrap download-section" id="download" aria-labelledby="download-title"><div><p class="eyebrow">Für dein Android-Radio</p><h2 id="download-title">Touran Live herunterladen.</h2><p id="download-status">Öffentlicher Download: 0.6.1 · ältere Bluetooth-/ELM327-Version. Die hier vorgestellte ESP32-Entwicklung 0.7.1 ist noch nicht als Server-Update veröffentlicht.</p><p class="small muted">Android ab 8.0 · Test-APK · Installation aus dieser Quelle muss auf dem Gerät erlaubt sein. Ein Update benötigt einen kompatiblen Signierschlüssel.</p></div><div class="download-actions"><a class="button primary" id="apk-download" href="TouranLive-debug.apk" download>APK 0.6.1 herunterladen <span aria-hidden="true">↓</span></a><a class="button secondary" href="https://github.com/jygnw29kms-bit/135er-Touran">Quellcode &amp; Entwicklung <span aria-hidden="true">↗</span></a><span class="small muted">Downloadversion aus dem Server-Manifest</span></div></section>
+  </main>
+  <footer class="wrap footer"><a class="brand" href="#"><span class="brand-mark">135</span><span>135er <strong>TOURAN</strong></span></a><p>Ein persönliches Fahrzeugprojekt · Stand 9. Oktober 2026</p><a href="https://github.com/jygnw29kms-bit/135er-Touran">GitHub ↗</a></footer>
+  <dialog id="image-dialog" aria-labelledby="dialog-title"><div class="dialog-head"><h2 id="dialog-title">App-Vorschau</h2><button type="button" id="close-dialog" aria-label="Vorschau schließen">Schließen ×</button></div><img id="dialog-image" alt="" width="1024" height="600"><p class="small muted">Nachgebildete Oberfläche · keine Fahrzeugmessung</p></dialog>
+</body>
+</html>
